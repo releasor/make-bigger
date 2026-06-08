@@ -71,7 +71,7 @@ describe("App API integration", () => {
   });
 
   it("loads monitoring and report data from the API", async () => {
-    render(<App />);
+    renderApp();
 
     await waitFor(() => expect(screen.getByText("100,245.20")).toBeInTheDocument());
     expect(screen.getByText("交易胜率：50.00%")).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe("App API integration", () => {
   });
 
   it("shows the current virtual trading operation and recent audit details", async () => {
-    render(<App />);
+    renderApp();
 
     await waitFor(() => expect(screen.getByText("当前执行")).toBeInTheDocument());
     expect(screen.getByText("运行阶段：运行完成")).toBeInTheDocument();
@@ -88,8 +88,18 @@ describe("App API integration", () => {
     expect(screen.getByText("风控校验通过：within_exposure_limit")).toBeInTheDocument();
   });
 
+  it("shows closed market status and after-market analysis outside trading hours", async () => {
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText("市场状态：休盘时间")).toBeInTheDocument());
+    expect(screen.getByText("当前时段：盘后休市")).toBeInTheDocument();
+    expect(screen.getByText("盘后分析")).toBeInTheDocument();
+    expect(screen.getByText("今日虚拟盘收益：0.25%")).toBeInTheDocument();
+    expect(screen.getByText("复盘结论：策略今日达标")).toBeInTheDocument();
+  });
+
   it("calls the simulation endpoint when running virtual trading", async () => {
-    render(<App />);
+    renderApp();
 
     fireEvent.click(screen.getByRole("button", { name: "运行虚拟盘" }));
 
@@ -99,7 +109,7 @@ describe("App API integration", () => {
   });
 
   it("shows visible feedback after virtual trading finishes", async () => {
-    render(<App />);
+    renderApp();
 
     fireEvent.click(screen.getByRole("button", { name: "运行虚拟盘" }));
 
@@ -108,6 +118,10 @@ describe("App API integration", () => {
     });
   });
 });
+
+function renderApp() {
+  return render(<App now={new Date("2026-06-08T21:13:30+08:00")} />);
+}
 
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), {

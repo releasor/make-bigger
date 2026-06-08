@@ -1,3 +1,4 @@
+import { getAShareMarketSession } from "@itrade/domain";
 import { useEffect, useState } from "react";
 import "./styles.css";
 
@@ -30,7 +31,11 @@ interface AuditEventState {
   details: Record<string, string | number | boolean>;
 }
 
-export function App() {
+interface AppProps {
+  now?: Date;
+}
+
+export function App({ now = new Date() }: AppProps = {}) {
   const [mode, setMode] = useState<Mode>("rules");
   const [monitoring, setMonitoring] = useState<MonitoringState | null>(null);
   const [report, setReport] = useState<DailyReportState | null>(null);
@@ -82,6 +87,7 @@ export function App() {
   const latestOperation = isRunning ? "执行请求中" : latestAuditEvent ? auditActionLabel(latestAuditEvent.action) : "等待指令";
   const displayStatus = getDisplayStatus(monitoring?.status, isRunning, report);
   const timeline = buildRunTimeline(isRunning, monitoring, report, auditEvents);
+  const marketSession = getAShareMarketSession(now);
 
   return (
     <main className="shell">
@@ -126,9 +132,14 @@ export function App() {
 
         <aside className="panel">
           <h2>实时监控</h2>
+          <div className={`marketStatus ${marketSession.isOpen ? "open" : "closed"}`} aria-label="A股市场状态">
+            <strong>市场状态：{marketSession.label}</strong>
+            <span>当前时段：{marketSession.sessionName}</span>
+            <small>{marketSession.nextAction}</small>
+          </div>
           <dl className="metrics">
             <div>
-              <dt>状态</dt>
+              <dt>虚拟盘</dt>
               <dd>{displayStatus}</dd>
             </div>
             <div>
@@ -180,6 +191,24 @@ export function App() {
             <p>胜率、命中率、达标率将在虚拟盘运行后生成。</p>
           )}
         </section>
+        {marketSession.showAfterMarketAnalysis && (
+          <section className="panel afterMarketPanel">
+            <h2>盘后分析</h2>
+            {report ? (
+              <>
+                <p>今日虚拟盘收益：{percent(report.dailyReturnPct)}</p>
+                <p>复盘结论：策略今日{report.strategyTargetAchieved ? "达标" : "未达标"}</p>
+                <p>
+                  成交复盘：
+                  {monitoring ? `${monitoring.fills} 笔成交，${monitoring.positions} 个持仓` : "等待监控数据"}
+                </p>
+                <p>次日观察：继续跟踪高置信度信号、未命中信号和风控拒单原因。</p>
+              </>
+            ) : (
+              <p>盘后分析将在虚拟盘运行后生成。</p>
+            )}
+          </section>
+        )}
         <section className="panel">
           <h2>审计日志</h2>
           <p>已记录事件：{monitoring?.auditEvents ?? 0}</p>

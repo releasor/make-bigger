@@ -118,6 +118,70 @@ export interface AuditEvent {
   details: Record<string, string | number | boolean>;
 }
 
+export type AShareMarketSessionCode =
+  | "closed_day"
+  | "pre_market"
+  | "opening_auction"
+  | "auction_pause"
+  | "continuous_trading"
+  | "midday_break"
+  | "closing_auction"
+  | "after_market";
+
+export interface AShareMarketSession {
+  code: AShareMarketSessionCode;
+  label: "交易时间" | "休盘时间";
+  sessionName: string;
+  isOpen: boolean;
+  showAfterMarketAnalysis: boolean;
+  nextAction: string;
+}
+
+export function getAShareMarketSession(now: Date = new Date()): AShareMarketSession {
+  const { weekday, minutes } = getShanghaiMarketTime(now);
+
+  if (weekday === "Sat" || weekday === "Sun") {
+    return closedSession("closed_day", "休盘日", "等待下一个交易日");
+  }
+
+  if (minutes < toMinutes(9, 15)) {
+    return closedSession("pre_market", "盘前休盘", "等待 09:15 开盘集合竞价");
+  }
+
+  if (minutes < toMinutes(9, 25)) {
+    return openSession("opening_auction", "开盘集合竞价", "等待 09:30 连续竞价");
+  }
+
+  if (minutes < toMinutes(9, 30)) {
+    return closedSession("auction_pause", "集合竞价暂停", "等待 09:30 连续竞价");
+  }
+
+  if (minutes < toMinutes(11, 30)) {
+    return openSession("continuous_trading", "连续竞价", "跟踪实时信号和风控");
+  }
+
+  if (minutes < toMinutes(13, 0)) {
+    return closedSession("midday_break", "午间休市", "等待 13:00 下午连续竞价");
+  }
+
+  if (minutes < toMinutes(14, 57)) {
+    return openSession("continuous_trading", "连续竞价", "跟踪实时信号和风控");
+  }
+
+  if (minutes < toMinutes(15, 0)) {
+    return openSession("closing_auction", "收盘集合竞价", "等待 15:00 收盘");
+  }
+
+  return {
+    code: "after_market",
+    label: "休盘时间",
+    sessionName: "盘后休市",
+    isOpen: false,
+    showAfterMarketAnalysis: true,
+    nextAction: "生成盘后分析和次日观察清单"
+  };
+}
+
 export function createStrategyVersion(seed: StrategySeed): StrategyDefinition {
   const now = "2026-06-08T09:30:00.000+08:00";
 
@@ -139,6 +203,34 @@ export function createStrategyVersion(seed: StrategySeed): StrategyDefinition {
     createdAt: now,
     updatedAt: now
   };
+}
+
+function openSession(code: AShareMarketSessionCode, sessionName: string, nextAction: string): AShareMarketSession {
+  return { code, label: "交易时间", sessionName, isOpen: true, showAfterMarketAnalysis: false, nextAction };
+}
+
+function closedSession(code: AShareMarketSessionCode, sessionName: string, nextAction: string): AShareMarketSession {
+  return { code, label: "休盘时间", sessionName, isOpen: false, showAfterMarketAnalysis: false, nextAction };
+}
+
+function getShanghaiMarketTime(date: Date): { weekday: string; minutes: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "0";
+
+  return {
+    weekday: value("weekday"),
+    minutes: toMinutes(Number(value("hour")), Number(value("minute")))
+  };
+}
+
+function toMinutes(hour: number, minute: number): number {
+  return hour * 60 + minute;
 }
 
 export function validateStrategyDefinition(strategy: StrategyDefinition): ValidationResult {

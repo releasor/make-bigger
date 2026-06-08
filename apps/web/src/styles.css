@@ -154,6 +154,38 @@ h3 {
   margin: 0;
 }
 
+.marketStatus {
+  border: 1px solid #dce3eb;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.marketStatus.closed {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.marketStatus.open {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.marketStatus strong {
+  color: #172033;
+}
+
+.marketStatus span {
+  color: #344456;
+  font-size: 13px;
+}
+
+.marketStatus small {
+  color: #6b7280;
+}
+
 .metrics div {
   display: flex;
   justify-content: space-between;
@@ -265,6 +297,16 @@ h3 {
   color: #4f6b8a;
   font-size: 13px;
   margin: 6px 0 0;
+}
+
+.afterMarketPanel {
+  border-color: #cbd5e1;
+  background: #fbfdff;
+}
+
+.afterMarketPanel p {
+  color: #344456;
+  margin-bottom: 10px;
 }
 
 .ok {

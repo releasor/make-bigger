@@ -21,10 +21,20 @@ interface DailyReportState {
   dailyReturnPct: number;
 }
 
+interface AuditEventState {
+  id: string;
+  timestamp: string;
+  actor: "system" | "user" | "ai";
+  action: string;
+  entityId: string;
+  details: Record<string, string | number | boolean>;
+}
+
 export function App() {
   const [mode, setMode] = useState<Mode>("rules");
   const [monitoring, setMonitoring] = useState<MonitoringState | null>(null);
   const [report, setReport] = useState<DailyReportState | null>(null);
+  const [auditEvents, setAuditEvents] = useState<AuditEventState[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [runMessage, setRunMessage] = useState("尚未运行虚拟盘");
 
@@ -36,6 +46,10 @@ export function App() {
     const reportResponse = await fetch("/api/report/daily");
     const reportBody = await reportResponse.json();
     setReport(reportBody.report);
+
+    const auditResponse = await fetch("/api/audit");
+    const auditBody = (await auditResponse.json()) as { events?: AuditEventState[] };
+    setAuditEvents(auditBody.events ?? []);
 
     return monitoringBody;
   }
@@ -61,6 +75,13 @@ export function App() {
     void fetch("/api/strategies");
     void refresh();
   }, []);
+
+  const recentAuditEvents = [...auditEvents].slice(-6).reverse();
+  const latestAuditEvent = recentAuditEvents[0];
+  const runtimePhase = getRuntimePhase(isRunning, report);
+  const latestOperation = isRunning ? "执行请求中" : latestAuditEvent ? auditActionLabel(latestAuditEvent.action) : "等待指令";
+  const displayStatus = getDisplayStatus(monitoring?.status, isRunning, report);
+  const timeline = buildRunTimeline(isRunning, monitoring, report, auditEvents);
 
   return (
     <main className="shell">
@@ -108,7 +129,7 @@ export function App() {
           <dl className="metrics">
             <div>
               <dt>状态</dt>
-              <dd>{monitoring?.status ?? "加载中"}</dd>
+              <dd>{displayStatus}</dd>
             </div>
             <div>
               <dt>策略数</dt>
@@ -127,6 +148,21 @@ export function App() {
               <dd className="ok">正常</dd>
             </div>
           </dl>
+
+          <div className="runtimePanel" aria-label="虚拟盘当前执行">
+            <h3>当前执行</h3>
+            <p>运行阶段：{runtimePhase}</p>
+            <p>最新操作：{latestOperation}</p>
+            <p>最后更新时间：{latestAuditEvent ? formatAuditTime(latestAuditEvent.timestamp) : "暂无"}</p>
+            <ol className="timeline" aria-label="虚拟盘执行阶段">
+              {timeline.map((step) => (
+                <li className={`timelineStep ${step.state}`} key={step.label}>
+                  <span>{step.label}</span>
+                  <strong>{step.detail}</strong>
+                </li>
+              ))}
+            </ol>
+          </div>
         </aside>
       </section>
 
@@ -147,6 +183,21 @@ export function App() {
         <section className="panel">
           <h2>审计日志</h2>
           <p>已记录事件：{monitoring?.auditEvents ?? 0}</p>
+          <ul className="auditList" aria-label="最近审计事件">
+            {recentAuditEvents.length > 0 ? (
+              recentAuditEvents.map((event, index) => (
+                <li key={`${event.id}-${index}`}>
+                  <div>
+                    <strong>{auditActionLabel(event.action)}</strong>
+                    <time>{formatAuditTime(event.timestamp)}</time>
+                  </div>
+                  <p>{auditEventSummary(event)}</p>
+                </li>
+              ))
+            ) : (
+              <li className="emptyAudit">暂无审计事件。运行虚拟盘后会显示风控、下单和成交记录。</li>
+            )}
+          </ul>
         </section>
         <section className="panel">
           <h2>告警中心</h2>
@@ -186,6 +237,97 @@ function AiMode() {
       <textarea aria-label="AI 策略修改请求" placeholder="例如：把买入条件改成趋势突破，并降低单票仓位。" />
     </div>
   );
+}
+
+function getRuntimePhase(isRunning: boolean, report: DailyReportState | null): string {
+  if (isRunning) return "执行中";
+  if (report) return "运行完成";
+  return "待运行";
+}
+
+function getDisplayStatus(status: string | undefined, isRunning: boolean, report: DailyReportState | null): string {
+  if (isRunning) return "执行中";
+  if (report) return "运行完成";
+  if (status === "idle") return "待运行";
+  if (status === "running") return "运行中";
+  return "加载中";
+}
+
+function auditActionLabel(action: string): string {
+  if (action === "risk_checked") return "风控校验";
+  if (action === "virtual_fill_created") return "虚拟成交";
+  if (action === "strategy_parameters_hot_updated") return "策略热更新";
+  return action;
+}
+
+function auditEventSummary(event: AuditEventState): string {
+  if (event.action === "risk_checked") {
+    const approved = event.details.approved ? "通过" : "拒绝";
+    return `风控校验${approved}：${event.details.reason ?? "未给出原因"}`;
+  }
+
+  if (event.action === "virtual_fill_created") {
+    return `买入/卖出成交：${event.details.symbol ?? event.entityId}，${event.details.quantity ?? 0} 股`;
+  }
+
+  if (event.action === "strategy_parameters_hot_updated") {
+    return `策略参数已修改：${event.entityId}`;
+  }
+
+  return `${auditActionLabel(event.action)}：${event.entityId}`;
+}
+
+function formatAuditTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+
+  return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function buildRunTimeline(
+  isRunning: boolean,
+  monitoring: MonitoringState | null,
+  report: DailyReportState | null,
+  auditEvents: AuditEventState[]
+) {
+  const riskChecks = monitoring?.orders ?? auditEvents.filter((event) => event.action === "risk_checked").length;
+  const fills = monitoring?.fills ?? 0;
+  const signals = monitoring?.signals ?? 0;
+  const hasRun = Boolean(report || monitoring?.auditEvents);
+
+  return [
+    {
+      label: "准备行情",
+      detail: hasRun ? "样例分钟线已载入" : "等待启动",
+      state: stepState(hasRun || isRunning, isRunning && !hasRun)
+    },
+    {
+      label: "生成信号",
+      detail: `${signals} 条`,
+      state: stepState(signals > 0, isRunning && signals === 0)
+    },
+    {
+      label: "风控校验",
+      detail: `${riskChecks} 次`,
+      state: stepState(riskChecks > 0, isRunning && riskChecks === 0)
+    },
+    {
+      label: "撮合成交",
+      detail: `${fills} 笔`,
+      state: stepState(fills > 0, isRunning && fills === 0)
+    },
+    {
+      label: "生成日报",
+      detail: report ? "已生成" : "等待运行",
+      state: stepState(Boolean(report), isRunning && !report)
+    }
+  ];
+}
+
+function stepState(done: boolean, active: boolean): "done" | "active" | "pending" {
+  if (done) return "done";
+  if (active) return "active";
+  return "pending";
 }
 
 function money(value: number): string {

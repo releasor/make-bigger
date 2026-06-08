@@ -170,6 +170,103 @@ h3 {
   font-weight: 700;
 }
 
+.runtimePanel {
+  border-top: 1px solid #eef2f6;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.runtimePanel p {
+  color: #344456;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.timeline,
+.auditList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timeline {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.timelineStep {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 28px;
+}
+
+.timelineStep::before {
+  border-radius: 999px;
+  content: "";
+  flex: 0 0 9px;
+  height: 9px;
+  width: 9px;
+}
+
+.timelineStep.done::before {
+  background: #0f7a4f;
+}
+
+.timelineStep.active::before {
+  background: #b7791f;
+}
+
+.timelineStep.pending::before {
+  background: #b6c2cf;
+}
+
+.timelineStep span {
+  color: #5f7085;
+  flex: 1;
+}
+
+.timelineStep strong {
+  color: #172033;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.auditList {
+  display: grid;
+  gap: 12px;
+}
+
+.auditList li {
+  border-top: 1px solid #eef2f6;
+  padding-top: 10px;
+}
+
+.auditList div {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.auditList strong {
+  color: #172033;
+}
+
+.auditList time {
+  color: #708196;
+  font-size: 12px;
+}
+
+.auditList p,
+.emptyAudit {
+  color: #4f6b8a;
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
 .ok {
   color: #0f7a4f;
 }

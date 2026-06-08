@@ -14,9 +14,11 @@ export function findShortTermBuySignals(
   const suggestedPositionPct = options.suggestedPositionPct ?? 0.1;
   const stopLossPct = options.stopLossPct ?? 0.08;
 
-  return bars
+  const signals = bars
     .map((bar) => buildBuySignal(bar, suggestedPositionPct, stopLossPct))
     .filter((signal): signal is ShortTermBuySignal => Boolean(signal && signal.confidenceScore >= minConfidenceScore));
+
+  return latestBuySignalPerSymbol(signals);
 }
 
 export function createManualPositionFromSignal(signal: ShortTermBuySignal, quantity = 1000): ManualPosition {
@@ -144,6 +146,19 @@ function latestBarForSymbol(bars: MarketBar[], symbol: string): MarketBar | unde
   return bars
     .filter((bar) => bar.symbol === symbol)
     .sort((left, right) => right.timestamp.localeCompare(left.timestamp))[0];
+}
+
+function latestBuySignalPerSymbol(signals: ShortTermBuySignal[]): ShortTermBuySignal[] {
+  const latestBySymbol = new Map<string, ShortTermBuySignal>();
+
+  for (const signal of signals) {
+    const existing = latestBySymbol.get(signal.symbol);
+    if (!existing || signal.timestamp > existing.timestamp) {
+      latestBySymbol.set(signal.symbol, signal);
+    }
+  }
+
+  return [...latestBySymbol.values()].sort((left, right) => right.confidenceScore - left.confidenceScore);
 }
 
 function round2(value: number): number {

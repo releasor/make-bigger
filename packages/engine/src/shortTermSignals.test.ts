@@ -31,6 +31,17 @@ describe("short-term signal engine", () => {
     expect(signals).toHaveLength(0);
   });
 
+  it("keeps only the latest high-conviction buy signal per symbol", () => {
+    const signals = findShortTermBuySignals([
+      bar("000001.SZ", 10.1, 10.38, 10.34, 26000, 10.06, 15000, 43, "2026-06-08T09:31:00.000+08:00"),
+      bar("000001.SZ", 10.34, 10.58, 10.55, 28000, 10.08, 15000, 55, "2026-06-08T09:32:00.000+08:00")
+    ]);
+
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.timestamp).toBe("2026-06-08T09:32:00.000+08:00");
+    expect(signals[0]?.currentPrice).toBe(10.55);
+  });
+
   it("emits a sell alert when a manually marked position breaks its stop loss", () => {
     const position: ManualPosition = {
       id: "manual-000001",
@@ -65,11 +76,12 @@ function bar(
   volume: number,
   ma20: number,
   avgVolume20: number,
-  rsi14: number
+  rsi14: number,
+  timestamp = "2026-06-08T09:32:00.000+08:00"
 ): MarketBar {
   return {
     symbol,
-    timestamp: "2026-06-08T09:32:00.000+08:00",
+    timestamp,
     open,
     high,
     low: Math.min(open, close),

@@ -72,6 +72,23 @@ interface SellSignalAlertState {
   basis: string[];
 }
 
+interface MarketDataStatusState {
+  source: {
+    provider: string;
+    isReal: boolean;
+    updatedAt: string;
+    symbols: string[];
+    warnings: string[];
+    cacheHit: boolean;
+  };
+  quality: {
+    ok: boolean;
+    issues: string[];
+  };
+  dailyBars: number;
+  minuteBars: number;
+}
+
 interface AppProps {
   now?: Date;
 }
@@ -88,6 +105,7 @@ export function App({ now = new Date() }: AppProps = {}) {
   const [shortTermSignals, setShortTermSignals] = useState<ShortTermBuySignalState[]>([]);
   const [manualPositions, setManualPositions] = useState<ManualPositionState[]>([]);
   const [sellAlerts, setSellAlerts] = useState<SellSignalAlertState[]>([]);
+  const [marketData, setMarketData] = useState<MarketDataStatusState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [markingSignalId, setMarkingSignalId] = useState<string | null>(null);
   const [runMessage, setRunMessage] = useState(runCopy.idle);
@@ -105,6 +123,10 @@ export function App({ now = new Date() }: AppProps = {}) {
     const auditResponse = await fetch("/api/audit");
     const auditBody = (await auditResponse.json()) as { events?: AuditEventState[] };
     setAuditEvents(auditBody.events ?? []);
+
+    const marketDataResponse = await fetch("/api/market-data/status");
+    const marketDataBody = (await marketDataResponse.json()) as MarketDataStatusState;
+    setMarketData(marketDataBody);
 
     const shortTermResponse = await fetch("/api/short-term/signals");
     const shortTermBody = (await shortTermResponse.json()) as { signals?: ShortTermBuySignalState[] };
@@ -232,6 +254,18 @@ export function App({ now = new Date() }: AppProps = {}) {
             <strong>市场状态：{marketSession.label}</strong>
             <span>当前时段：{marketSession.sessionName}</span>
             <small>{marketSession.nextAction}</small>
+          </div>
+          <div className={`dataStatus ${marketData?.source.isReal ? "real" : "sample"}`} aria-label="行情数据状态">
+            <div>
+              <strong>行情数据</strong>
+              <span>{marketData ? dataRealityLabel(marketData) : "加载中"}</span>
+            </div>
+            <p>数据源：{marketData?.source.provider ?? "加载中"}</p>
+            <p>数据质量：{marketData?.quality.ok ? "正常" : "需检查"}</p>
+            <p>日线/分钟：{marketData ? `${marketData.dailyBars}/${marketData.minuteBars}` : "0/0"}</p>
+            {marketData && marketData.source.warnings.length > 0 && (
+              <small>{marketData.source.warnings.slice(0, 2).join("；")}</small>
+            )}
           </div>
           <dl className="metrics">
             <div>
@@ -589,7 +623,7 @@ function buildRunTimeline(
   return [
     {
       label: "准备行情",
-      detail: hasRun ? "样例分钟线已载入" : "等待启动",
+      detail: hasRun ? "行情数据已载入" : "等待启动",
       state: stepState(hasRun || isRunning, isRunning && !hasRun)
     },
     {
@@ -619,6 +653,12 @@ function stepState(done: boolean, active: boolean): "done" | "active" | "pending
   if (done) return "done";
   if (active) return "active";
   return "pending";
+}
+
+function dataRealityLabel(marketData: MarketDataStatusState): string {
+  if (!marketData.source.isReal) return "样例数据";
+  if (marketData.source.cacheHit) return "真实缓存";
+  return "真实数据";
 }
 
 function money(value: number): string {

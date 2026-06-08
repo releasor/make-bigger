@@ -9,15 +9,20 @@ import {
 } from "@itrade/domain";
 import {
   buildDailyReport,
+  createCachedMarketDataProvider,
   createManualPositionFromSignal,
+  EastMoneyMarketDataProvider,
+  fetchMarketDataSnapshot,
   findShortTermBuySignals,
-  getSampleBars,
+  type MarketDataProvider,
+  type MarketDataSnapshot,
   monitorSellSignals,
   runVirtualTradingSession,
   type DailyReport,
   type VirtualTradingResult
 } from "@itrade/engine";
 import Fastify from "fastify";
+import { fileURLToPath } from "node:url";
 
 interface AppState {
   strategies: StrategyDefinition[];
@@ -27,10 +32,21 @@ interface AppState {
   shortTermSignals: ShortTermBuySignal[];
   manualPositions: ManualPosition[];
   sellAlerts: SellSignalAlert[];
+  marketDataSnapshot: MarketDataSnapshot | null;
 }
 
-export function buildServer() {
+interface BuildServerOptions {
+  marketDataProvider?: MarketDataProvider;
+}
+
+export function buildServer(options: BuildServerOptions = {}) {
   const server = Fastify({ logger: false });
+  const marketDataProvider =
+    options.marketDataProvider ??
+    createCachedMarketDataProvider({
+      provider: new EastMoneyMarketDataProvider(),
+      cacheFile: defaultMarketDataCacheFile()
+    });
   const state: AppState = {
     strategies: [
       createStrategyVersion({
@@ -46,7 +62,8 @@ export function buildServer() {
     auditEvents: [],
     shortTermSignals: [],
     manualPositions: [],
-    sellAlerts: []
+    sellAlerts: [],
+    marketDataSnapshot: null
   };
 
   server.register(cors, { origin: true });
@@ -54,6 +71,17 @@ export function buildServer() {
   server.get("/api/health", async () => ({ ok: true }));
 
   server.get("/api/strategies", async () => ({ strategies: state.strategies }));
+
+  server.get("/api/market-data/status", async () => {
+    const snapshot = await refreshMarketData();
+
+    return {
+      source: snapshot.source,
+      quality: snapshot.quality,
+      dailyBars: snapshot.daily.length,
+      minuteBars: snapshot.minute.length
+    };
+  });
 
   server.post("/api/strategies/:id/parameters", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -70,7 +98,7 @@ export function buildServer() {
   });
 
   server.post("/api/simulation/run", async () => {
-    const bars = getSampleBars();
+    const bars = await refreshMarketData();
     const result = runVirtualTradingSession({
       strategies: state.strategies,
       bars: bars.minute,
@@ -96,7 +124,7 @@ export function buildServer() {
   });
 
   server.get("/api/short-term/signals", async () => {
-    state.shortTermSignals = refreshShortTermSignals();
+    state.shortTermSignals = await refreshShortTermSignals();
 
     return { signals: state.shortTermSignals };
   });
@@ -104,14 +132,14 @@ export function buildServer() {
   server.post("/api/short-term/signals/:id/manual-buy", async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as { quantity?: number } | null;
-    const signals = state.shortTermSignals.length > 0 ? state.shortTermSignals : refreshShortTermSignals();
+    const signals = state.shortTermSignals.length > 0 ? state.shortTermSignals : await refreshShortTermSignals();
     const signal = signals.find((item) => item.id === id);
 
     if (!signal) return reply.status(404).send({ error: "short-term signal not found" });
 
     const position = createManualPositionFromSignal(signal, body?.quantity ?? 1000);
     state.manualPositions = [...state.manualPositions.filter((item) => item.signalId !== signal.id), position];
-    state.sellAlerts = monitorSellSignals(state.manualPositions, getSampleBars().minute);
+    state.sellAlerts = monitorSellSignals(state.manualPositions, (await refreshMarketData()).minute);
     state.auditEvents.push(
       audit("user", "manual_buy_marked", signal.id, {
         symbol: signal.symbol,
@@ -124,7 +152,7 @@ export function buildServer() {
   });
 
   server.get("/api/manual-positions", async () => {
-    state.sellAlerts = monitorSellSignals(state.manualPositions, getSampleBars().minute);
+    state.sellAlerts = monitorSellSignals(state.manualPositions, (await refreshMarketData()).minute);
 
     return { positions: state.manualPositions, sellAlerts: state.sellAlerts };
   });
@@ -140,7 +168,10 @@ export function buildServer() {
     auditEvents: state.auditEvents.length,
     shortTermSignals: state.shortTermSignals.length,
     manualPositions: state.manualPositions.length,
-    sellAlerts: state.sellAlerts.length
+    sellAlerts: state.sellAlerts.length,
+    dataProvider: state.marketDataSnapshot?.source.provider ?? "loading",
+    dataIsReal: state.marketDataSnapshot?.source.isReal ?? false,
+    dataWarnings: state.marketDataSnapshot?.source.warnings.length ?? 0
   }));
 
   server.get("/api/report/daily", async () => ({ report: state.report }));
@@ -149,11 +180,22 @@ export function buildServer() {
 
   return server;
 
-  function refreshShortTermSignals(): ShortTermBuySignal[] {
-    state.shortTermSignals = findShortTermBuySignals(getSampleBars().minute);
+  async function refreshMarketData(): Promise<MarketDataSnapshot> {
+    const symbols = Array.from(new Set(state.strategies.flatMap((strategy) => strategy.universe)));
+    state.marketDataSnapshot = await fetchMarketDataSnapshot(marketDataProvider, symbols);
+
+    return state.marketDataSnapshot;
+  }
+
+  async function refreshShortTermSignals(): Promise<ShortTermBuySignal[]> {
+    state.shortTermSignals = findShortTermBuySignals((await refreshMarketData()).minute);
 
     return state.shortTermSignals;
   }
+}
+
+function defaultMarketDataCacheFile(): string {
+  return fileURLToPath(new URL("../../../tmp/market-data-cache/eastmoney-snapshot.json", import.meta.url));
 }
 
 function audit(

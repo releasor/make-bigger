@@ -36,6 +36,21 @@ describe("App API integration", () => {
             }
           });
         }
+        if (url.endsWith("/api/market-data/status")) {
+          return json({
+            source: {
+              provider: "eastmoney",
+              isReal: true,
+              updatedAt: "2026-06-08T10:00:00.000+08:00",
+              symbols: ["000001.SZ", "600000.SH"],
+              warnings: [],
+              cacheHit: false
+            },
+            quality: { ok: true, issues: [] },
+            dailyBars: 4,
+            minuteBars: 240
+          });
+        }
         if (url.endsWith("/api/short-term/signals")) {
           return json({
             signals: [
@@ -124,6 +139,15 @@ describe("App API integration", () => {
     expect(screen.getByText("最新操作：虚拟成交")).toBeInTheDocument();
     expect(screen.getByText("买入/卖出成交：000001.SZ，100 股")).toBeInTheDocument();
     expect(screen.getByText("风控校验通过：within_exposure_limit")).toBeInTheDocument();
+  });
+
+  it("shows real market data source and quality status", async () => {
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText("数据源：eastmoney")).toBeInTheDocument());
+    expect(screen.getByText("真实数据")).toBeInTheDocument();
+    expect(screen.getByText("数据质量：正常")).toBeInTheDocument();
+    expect(screen.getByText("日线/分钟：4/240")).toBeInTheDocument();
   });
 
   it("shows closed market status and after-market analysis outside trading hours", async () => {

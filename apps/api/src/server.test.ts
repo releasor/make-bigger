@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildServer } from "./server";
+import { getSampleBars, type MarketDataProvider, type MarketDataSnapshot } from "@itrade/engine";
 
 describe("api server", () => {
   it("returns monitoring state after running a virtual session", async () => {
-    const server = buildServer();
+    const server = buildServer({ marketDataProvider: fakeMarketDataProvider() });
 
     const run = await server.inject({ method: "POST", url: "/api/simulation/run" });
     expect(run.statusCode).toBe(200);
@@ -18,7 +19,7 @@ describe("api server", () => {
   });
 
   it("hot updates strategy parameters and records an audit event", async () => {
-    const server = buildServer();
+    const server = buildServer({ marketDataProvider: fakeMarketDataProvider() });
 
     const response = await server.inject({
       method: "POST",
@@ -36,7 +37,7 @@ describe("api server", () => {
   });
 
   it("returns only high-conviction short-term buy signals", async () => {
-    const server = buildServer();
+    const server = buildServer({ marketDataProvider: fakeMarketDataProvider() });
 
     const response = await server.inject({ method: "GET", url: "/api/short-term/signals" });
     const body = response.json();
@@ -55,7 +56,7 @@ describe("api server", () => {
   });
 
   it("marks a manual buy and starts sell-signal monitoring", async () => {
-    const server = buildServer();
+    const server = buildServer({ marketDataProvider: fakeMarketDataProvider() });
 
     const signalsResponse = await server.inject({ method: "GET", url: "/api/short-term/signals" });
     const [signal] = signalsResponse.json().signals;
@@ -80,4 +81,42 @@ describe("api server", () => {
     const audit = await server.inject({ method: "GET", url: "/api/audit" });
     expect(audit.json().events.map((event: { action: string }) => event.action)).toContain("manual_buy_marked");
   });
+
+  it("returns real market data source status and quality", async () => {
+    const server = buildServer({ marketDataProvider: fakeMarketDataProvider() });
+
+    const response = await server.inject({ method: "GET", url: "/api/market-data/status" });
+    const body = response.json();
+
+    expect(response.statusCode).toBe(200);
+    expect(body.source).toMatchObject({
+      provider: "eastmoney",
+      isReal: true,
+      cacheHit: false
+    });
+    expect(body.quality.ok).toBe(true);
+    expect(body.dailyBars).toBeGreaterThan(0);
+    expect(body.minuteBars).toBeGreaterThan(0);
+  });
 });
+
+function fakeMarketDataProvider(): MarketDataProvider {
+  return {
+    async getSnapshot(symbols: string[]): Promise<MarketDataSnapshot> {
+      const bars = getSampleBars();
+
+      return {
+        ...bars,
+        source: {
+          provider: "eastmoney",
+          isReal: true,
+          updatedAt: "2026-06-08T10:00:00.000+08:00",
+          symbols,
+          warnings: [],
+          cacheHit: false
+        },
+        quality: { ok: true, issues: [] }
+      };
+    }
+  };
+}

@@ -193,6 +193,56 @@ h3 {
   color: #6b7280;
 }
 
+.dataStatus {
+  border: 1px solid #dce3eb;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.dataStatus.real {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.dataStatus.sample {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.dataStatus div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.dataStatus span {
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f7a4f;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.dataStatus.sample span {
+  color: #b42318;
+}
+
+.dataStatus p,
+.dataStatus small {
+  color: #344456;
+  font-size: 13px;
+  margin: 0;
+}
+
+.dataStatus small {
+  color: #9a3412;
+}
+
 .metrics div {
   display: flex;
   justify-content: space-between;

@@ -1,10 +1,49 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./styles.css";
 
 type Mode = "rules" | "canvas" | "ai";
 
+interface MonitoringState {
+  status: string;
+  strategies: number;
+  signals: number;
+  orders: number;
+  fills: number;
+  positions: number;
+  totalEquity: number;
+  auditEvents: number;
+}
+
+interface DailyReportState {
+  tradingWinRate: number;
+  signalHitRate: number;
+  strategyTargetAchieved: boolean;
+  dailyReturnPct: number;
+}
+
 export function App() {
   const [mode, setMode] = useState<Mode>("rules");
+  const [monitoring, setMonitoring] = useState<MonitoringState | null>(null);
+  const [report, setReport] = useState<DailyReportState | null>(null);
+
+  async function refresh() {
+    const monitoringResponse = await fetch("/api/monitoring");
+    setMonitoring(await monitoringResponse.json());
+
+    const reportResponse = await fetch("/api/report/daily");
+    const reportBody = await reportResponse.json();
+    setReport(reportBody.report);
+  }
+
+  async function runSimulation() {
+    await fetch("/api/simulation/run", { method: "POST" });
+    await refresh();
+  }
+
+  useEffect(() => {
+    void fetch("/api/strategies");
+    void refresh();
+  }, []);
 
   return (
     <main className="shell">
@@ -13,7 +52,9 @@ export function App() {
           <p className="eyebrow">iTrade Virtual Desk</p>
           <h1>虚拟交易工作台</h1>
         </div>
-        <button className="primary">运行虚拟盘</button>
+        <button className="primary" onClick={runSimulation}>
+          运行虚拟盘
+        </button>
       </header>
 
       <section className="grid">
@@ -45,15 +86,19 @@ export function App() {
           <dl className="metrics">
             <div>
               <dt>状态</dt>
-              <dd>虚拟盘待运行</dd>
+              <dd>{monitoring?.status ?? "加载中"}</dd>
             </div>
             <div>
               <dt>策略数</dt>
-              <dd>1</dd>
+              <dd>{monitoring?.strategies ?? 0}</dd>
+            </div>
+            <div>
+              <dt>信号/订单/成交</dt>
+              <dd>{monitoring ? `${monitoring.signals}/${monitoring.orders}/${monitoring.fills}` : "0/0/0"}</dd>
             </div>
             <div>
               <dt>组合权益</dt>
-              <dd>100,000.00</dd>
+              <dd>{money(monitoring?.totalEquity ?? 100000)}</dd>
             </div>
             <div>
               <dt>风险</dt>
@@ -66,11 +111,20 @@ export function App() {
       <section className="grid three">
         <section className="panel">
           <h2>日报指标</h2>
-          <p>胜率、命中率、达标率将在虚拟盘运行后生成。</p>
+          {report ? (
+            <>
+              <p>交易胜率：{percent(report.tradingWinRate)}</p>
+              <p>信号命中率：{percent(report.signalHitRate)}</p>
+              <p>策略达标：{report.strategyTargetAchieved ? "是" : "否"}</p>
+              <p>当日收益：{percent(report.dailyReturnPct)}</p>
+            </>
+          ) : (
+            <p>胜率、命中率、达标率将在虚拟盘运行后生成。</p>
+          )}
         </section>
         <section className="panel">
           <h2>审计日志</h2>
-          <p>参数热更新、规则发布和虚拟成交会记录在这里。</p>
+          <p>已记录事件：{monitoring?.auditEvents ?? 0}</p>
         </section>
         <section className="panel">
           <h2>告警中心</h2>
@@ -110,4 +164,12 @@ function AiMode() {
       <textarea aria-label="AI 策略修改请求" placeholder="例如：把买入条件改成趋势突破，并降低单票仓位。" />
     </div>
   );
+}
+
+function money(value: number): string {
+  return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function percent(value: number): string {
+  return `${(value * 100).toFixed(2)}%`;
 }

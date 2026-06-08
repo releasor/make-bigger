@@ -73,6 +73,44 @@ export interface Signal {
   reason: string;
 }
 
+export interface ShortTermBuySignal {
+  id: string;
+  symbol: string;
+  side: "buy";
+  timestamp: string;
+  currentPrice: number;
+  confidenceScore: number;
+  recommendation: "特别值得关注";
+  suggestedPositionPct: number;
+  stopLossPct: number;
+  stopLossPrice: number;
+  basis: string[];
+  riskNotes: string[];
+}
+
+export interface ManualPosition {
+  id: string;
+  signalId: string;
+  symbol: string;
+  quantity: number;
+  entryPrice: number;
+  stopLossPrice: number;
+  entryTimestamp: string;
+  status: "monitoring" | "sell_alerted" | "closed";
+}
+
+export interface SellSignalAlert {
+  id: string;
+  positionId: string;
+  symbol: string;
+  timestamp: string;
+  currentPrice: number;
+  triggerPrice: number;
+  reason: string;
+  action: "减仓观察" | "清仓观察";
+  basis: string[];
+}
+
 export interface Order {
   id: string;
   strategyId: string;

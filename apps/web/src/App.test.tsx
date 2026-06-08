@@ -36,6 +36,44 @@ describe("App API integration", () => {
             }
           });
         }
+        if (url.endsWith("/api/short-term/signals")) {
+          return json({
+            signals: [
+              {
+                id: "short-buy-000001.SZ-2026-06-08T09:32:00.000+08:00",
+                symbol: "000001.SZ",
+                side: "buy",
+                timestamp: "2026-06-08T09:32:00.000+08:00",
+                currentPrice: 10.34,
+                confidenceScore: 92,
+                recommendation: "特别值得关注",
+                suggestedPositionPct: 0.1,
+                stopLossPct: 0.08,
+                stopLossPrice: 9.51,
+                basis: ["放量 1.73 倍，短线资金活跃", "收盘价 10.34 突破 MA20 10.06"],
+                riskNotes: ["跌破 9.51 触发止损观察"]
+              }
+            ]
+          });
+        }
+        if (url.endsWith("/api/manual-positions")) {
+          return json({ positions: [], sellAlerts: [] });
+        }
+        if (url.includes("/api/short-term/signals/") && url.endsWith("/manual-buy")) {
+          return json({
+            position: {
+              id: "manual-short-buy-000001",
+              signalId: "short-buy-000001.SZ-2026-06-08T09:32:00.000+08:00",
+              symbol: "000001.SZ",
+              quantity: 1000,
+              entryPrice: 10.34,
+              stopLossPrice: 9.51,
+              entryTimestamp: "2026-06-08T09:32:00.000+08:00",
+              status: "monitoring"
+            },
+            sellAlerts: []
+          });
+        }
         if (url.endsWith("/api/audit")) {
           return json({
             events: [
@@ -124,6 +162,38 @@ describe("App API integration", () => {
     await waitFor(() => {
       expect(screen.getByRole("status")).toHaveTextContent("盘后复盘已生成，监控数据已刷新");
     });
+  });
+
+  it("shows high-conviction short-term buy signals with AI trading context", async () => {
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText("短线信号中心")).toBeInTheDocument());
+    expect(screen.getByText("AI 虚拟交易提示")).toBeInTheDocument();
+    expect(screen.getByText("000001.SZ")).toBeInTheDocument();
+    expect(screen.getByText("特别值得关注")).toBeInTheDocument();
+    expect(screen.getByText("建议仓位：10.00%")).toBeInTheDocument();
+    expect(screen.getByText("购买依据")).toBeInTheDocument();
+    expect(screen.getByText("放量 1.73 倍，短线资金活跃")).toBeInTheDocument();
+    expect(screen.getByText("风险边界")).toBeInTheDocument();
+  });
+
+  it("marks a manual buy and starts sell monitoring", async () => {
+    renderApp();
+
+    fireEvent.click(await screen.findByRole("button", { name: "标记已买入" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/short-term/signals/short-buy-000001.SZ-2026-06-08T09%3A32%3A00.000%2B08%3A00/manual-buy",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quantity: 1000 })
+        }
+      );
+    });
+    expect(screen.getByText("已标记买入，开始监测卖出信号。")).toBeInTheDocument();
+    expect(screen.getByText("000001.SZ 1000 股，成本 10.34")).toBeInTheDocument();
   });
 });
 

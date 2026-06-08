@@ -1,8 +1,18 @@
 import cors from "@fastify/cors";
-import { createStrategyVersion, type AuditEvent, type StrategyDefinition } from "@itrade/domain";
+import {
+  createStrategyVersion,
+  type AuditEvent,
+  type ManualPosition,
+  type SellSignalAlert,
+  type ShortTermBuySignal,
+  type StrategyDefinition
+} from "@itrade/domain";
 import {
   buildDailyReport,
+  createManualPositionFromSignal,
+  findShortTermBuySignals,
   getSampleBars,
+  monitorSellSignals,
   runVirtualTradingSession,
   type DailyReport,
   type VirtualTradingResult
@@ -14,6 +24,9 @@ interface AppState {
   lastRun: VirtualTradingResult | null;
   report: DailyReport | null;
   auditEvents: AuditEvent[];
+  shortTermSignals: ShortTermBuySignal[];
+  manualPositions: ManualPosition[];
+  sellAlerts: SellSignalAlert[];
 }
 
 export function buildServer() {
@@ -30,7 +43,10 @@ export function buildServer() {
     ],
     lastRun: null,
     report: null,
-    auditEvents: []
+    auditEvents: [],
+    shortTermSignals: [],
+    manualPositions: [],
+    sellAlerts: []
   };
 
   server.register(cors, { origin: true });
@@ -79,6 +95,40 @@ export function buildServer() {
     return { result, report: state.report };
   });
 
+  server.get("/api/short-term/signals", async () => {
+    state.shortTermSignals = refreshShortTermSignals();
+
+    return { signals: state.shortTermSignals };
+  });
+
+  server.post("/api/short-term/signals/:id/manual-buy", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { quantity?: number } | null;
+    const signals = state.shortTermSignals.length > 0 ? state.shortTermSignals : refreshShortTermSignals();
+    const signal = signals.find((item) => item.id === id);
+
+    if (!signal) return reply.status(404).send({ error: "short-term signal not found" });
+
+    const position = createManualPositionFromSignal(signal, body?.quantity ?? 1000);
+    state.manualPositions = [...state.manualPositions.filter((item) => item.signalId !== signal.id), position];
+    state.sellAlerts = monitorSellSignals(state.manualPositions, getSampleBars().minute);
+    state.auditEvents.push(
+      audit("user", "manual_buy_marked", signal.id, {
+        symbol: signal.symbol,
+        quantity: position.quantity,
+        entryPrice: position.entryPrice
+      })
+    );
+
+    return { position, sellAlerts: state.sellAlerts };
+  });
+
+  server.get("/api/manual-positions", async () => {
+    state.sellAlerts = monitorSellSignals(state.manualPositions, getSampleBars().minute);
+
+    return { positions: state.manualPositions, sellAlerts: state.sellAlerts };
+  });
+
   server.get("/api/monitoring", async () => ({
     status: state.lastRun ? "running" : "idle",
     strategies: state.strategies.length,
@@ -87,7 +137,10 @@ export function buildServer() {
     fills: state.lastRun?.fills.length ?? 0,
     positions: state.lastRun?.portfolio.positions.length ?? 0,
     totalEquity: state.lastRun?.portfolio.totalEquity ?? 100000,
-    auditEvents: state.auditEvents.length
+    auditEvents: state.auditEvents.length,
+    shortTermSignals: state.shortTermSignals.length,
+    manualPositions: state.manualPositions.length,
+    sellAlerts: state.sellAlerts.length
   }));
 
   server.get("/api/report/daily", async () => ({ report: state.report }));
@@ -95,6 +148,12 @@ export function buildServer() {
   server.get("/api/audit", async () => ({ events: state.auditEvents }));
 
   return server;
+
+  function refreshShortTermSignals(): ShortTermBuySignal[] {
+    state.shortTermSignals = findShortTermBuySignals(getSampleBars().minute);
+
+    return state.shortTermSignals;
+  }
 }
 
 function audit(

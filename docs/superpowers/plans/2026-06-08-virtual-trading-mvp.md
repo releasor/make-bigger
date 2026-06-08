@@ -2,7 +2,7 @@
 
 > **给后续 agent/工程师：** 这个计划对应已经落地的第一版 MVP。继续开发时请按任务边界推进，保持测试先行、小步提交和清晰模块边界。
 
-**目标：** 构建 AI 驱动 A 股虚拟交易平台的第一条可运行闭环：策略定义、可切换策略工作台、样例日线/分钟线数据、虚拟交易、组合风控、监控状态、审计日志和日报指标。
+**目标：** 构建 AI 驱动 A 股虚拟交易平台的第一条可运行闭环：策略定义、可切换策略工作台、样例日线/分钟线数据、虚拟交易、短线高置信度信号、人工标记买入后的卖出监控、组合风控、监控状态、审计日志和日报指标。
 
 **架构：** 使用 TypeScript monorepo。第一版本地运行，但 `domain`、`engine`、`api`、`web` 保持服务兼容边界，后续可以拆成独立服务或 worker。
 
@@ -29,6 +29,7 @@
 - 生产级数据存储。
 - 分布式 worker 部署。
 - 真实行情源接入。
+- 真实投资建议和真实资金托管。
 
 ## 目录结构
 
@@ -90,6 +91,7 @@ E:\Prizm\itrade
 `packages/domain`
 
 - 定义策略、规则、信号、订单、成交、持仓、组合快照和审计事件类型。
+- 定义短线买入信号、人工标记持仓和卖出提醒类型。
 - 提供策略版本创建和策略定义校验。
 - 不依赖 API、Web 或具体交易实现。
 
@@ -100,12 +102,14 @@ E:\Prizm\itrade
 - 执行组合风控检查。
 - 运行虚拟交易会话，生成订单、成交、持仓和审计事件。
 - 计算每日交易胜率、信号命中率、策略达标率等指标。
+- 计算短线买入信号置信度，并监测人工持仓的止损和转弱提醒。
 
 `apps/api`
 
 - 使用 Fastify 暴露本地 API。
 - 管理内存中的策略、模拟结果、日报和审计事件。
 - 提供策略列表、参数热更新、运行虚拟盘、监控状态、日报和审计接口。
+- 提供短线信号扫描、手动标记买入和人工持仓监控接口。
 
 `apps/web`
 
@@ -113,6 +117,7 @@ E:\Prizm\itrade
 - 展示可切换策略工作台：结构化规则、画布模块、AI 助手。
 - 调用 API 运行虚拟盘。
 - 展示监控状态、日报指标、审计事件数量和告警中心。
+- 展示短线信号中心、AI 虚拟交易提示、购买依据、风险边界和卖出提醒。
 
 ---
 
@@ -481,6 +486,52 @@ http://127.0.0.1:8787
 Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8787/api/simulation/run' -ContentType 'application/json' -Body '{}'
 Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/monitoring'
 Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/report/daily'
+```
+
+## 任务 12：短线信号中心和人工买后监控
+
+**文件：**
+
+- `packages/domain/src/index.ts`
+- `packages/engine/src/shortTermSignals.ts`
+- `packages/engine/src/shortTermSignals.test.ts`
+- `packages/engine/src/index.ts`
+- `apps/api/src/server.ts`
+- `apps/api/src/server.test.ts`
+- `apps/web/src/App.tsx`
+- `apps/web/src/App.test.tsx`
+- `apps/web/src/styles.css`
+- `docs/virtual-trading-mvp.md`
+
+**实现内容：**
+
+- `ShortTermBuySignal`：只表达高置信度短线虚拟买入提示。
+- `ManualPosition`：用户手动标记已买入后进入监控的虚拟持仓。
+- `SellSignalAlert`：止损、RSI 转弱或跌破 MA20 时生成的卖出提醒。
+- `findShortTermBuySignals`：按突破 MA20、放量、日内动能、RSI 区间和接近高位评分，默认 85 分以上才输出。
+- `createManualPositionFromSignal`：从买入信号生成虚拟人工持仓，默认 1000 股。
+- `monitorSellSignals`：持续检查人工持仓的卖出提醒。
+- `GET /api/short-term/signals`：扫描短线信号。
+- `POST /api/short-term/signals/:id/manual-buy`：标记已买入，写入 `manual_buy_marked` 审计事件。
+- `GET /api/manual-positions`：返回人工持仓和卖出提醒。
+- Web 控制台新增“短线信号中心”和“人工持仓监控”。
+
+**测试覆盖：**
+
+- 只有“特别值得关注”的高置信度短线买入信号会被输出。
+- 普通信号不会被输出。
+- 人工持仓跌破止损价时生成清仓观察提醒。
+- API 可以返回短线信号。
+- API 可以标记手动买入并写审计事件。
+- Web 可以展示购买依据、风险边界和 AI 虚拟交易提示。
+- Web 点击“标记已买入”后显示持仓监控反馈。
+
+**验证命令：**
+
+```powershell
+npm.cmd run test -- packages/engine/src/shortTermSignals.test.ts
+npm.cmd run test -- apps/api/src/server.test.ts
+npm.cmd run test -- apps/web/src/App.test.tsx
 ```
 
 ---

@@ -13,6 +13,9 @@ interface MonitoringState {
   positions: number;
   totalEquity: number;
   auditEvents: number;
+  shortTermSignals?: number;
+  manualPositions?: number;
+  sellAlerts?: number;
 }
 
 interface DailyReportState {
@@ -31,9 +34,49 @@ interface AuditEventState {
   details: Record<string, string | number | boolean>;
 }
 
+interface ShortTermBuySignalState {
+  id: string;
+  symbol: string;
+  side: "buy";
+  timestamp: string;
+  currentPrice: number;
+  confidenceScore: number;
+  recommendation: "特别值得关注";
+  suggestedPositionPct: number;
+  stopLossPct: number;
+  stopLossPrice: number;
+  basis: string[];
+  riskNotes: string[];
+}
+
+interface ManualPositionState {
+  id: string;
+  signalId: string;
+  symbol: string;
+  quantity: number;
+  entryPrice: number;
+  stopLossPrice: number;
+  entryTimestamp: string;
+  status: "monitoring" | "sell_alerted" | "closed";
+}
+
+interface SellSignalAlertState {
+  id: string;
+  positionId: string;
+  symbol: string;
+  timestamp: string;
+  currentPrice: number;
+  triggerPrice: number;
+  reason: string;
+  action: "减仓观察" | "清仓观察";
+  basis: string[];
+}
+
 interface AppProps {
   now?: Date;
 }
+
+const initialTradeMessage = "等待短线信号扫描。";
 
 export function App({ now = new Date() }: AppProps = {}) {
   const marketSession = getAShareMarketSession(now);
@@ -42,8 +85,13 @@ export function App({ now = new Date() }: AppProps = {}) {
   const [monitoring, setMonitoring] = useState<MonitoringState | null>(null);
   const [report, setReport] = useState<DailyReportState | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEventState[]>([]);
+  const [shortTermSignals, setShortTermSignals] = useState<ShortTermBuySignalState[]>([]);
+  const [manualPositions, setManualPositions] = useState<ManualPositionState[]>([]);
+  const [sellAlerts, setSellAlerts] = useState<SellSignalAlertState[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [markingSignalId, setMarkingSignalId] = useState<string | null>(null);
   const [runMessage, setRunMessage] = useState(runCopy.idle);
+  const [tradeMessage, setTradeMessage] = useState(initialTradeMessage);
 
   async function refresh() {
     const monitoringResponse = await fetch("/api/monitoring");
@@ -57,6 +105,24 @@ export function App({ now = new Date() }: AppProps = {}) {
     const auditResponse = await fetch("/api/audit");
     const auditBody = (await auditResponse.json()) as { events?: AuditEventState[] };
     setAuditEvents(auditBody.events ?? []);
+
+    const shortTermResponse = await fetch("/api/short-term/signals");
+    const shortTermBody = (await shortTermResponse.json()) as { signals?: ShortTermBuySignalState[] };
+    const latestSignals = shortTermBody.signals ?? [];
+    setShortTermSignals(latestSignals);
+    setTradeMessage((message) => {
+      if (message !== initialTradeMessage) return message;
+
+      return latestSignals.length > 0 ? "发现特别值得关注的短线买入信号，等待人工确认。" : "暂无特别值得关注的短线买入信号。";
+    });
+
+    const manualResponse = await fetch("/api/manual-positions");
+    const manualBody = (await manualResponse.json()) as {
+      positions?: ManualPositionState[];
+      sellAlerts?: SellSignalAlertState[];
+    };
+    setManualPositions(manualBody.positions ?? []);
+    setSellAlerts(manualBody.sellAlerts ?? []);
 
     return monitoringBody;
   }
@@ -75,6 +141,35 @@ export function App({ now = new Date() }: AppProps = {}) {
       setRunMessage("虚拟盘运行失败，请检查 API 服务。");
     } finally {
       setIsRunning(false);
+    }
+  }
+
+  async function markManualBuy(signal: ShortTermBuySignalState) {
+    setMarkingSignalId(signal.id);
+    setTradeMessage(`正在标记 ${signal.symbol} 买入，卖出监控即将启动。`);
+
+    try {
+      const response = await fetch(`/api/short-term/signals/${encodeURIComponent(signal.id)}/manual-buy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: 1000 })
+      });
+      if (!response.ok) throw new Error("manual buy failed");
+
+      const body = (await response.json()) as {
+        position: ManualPositionState;
+        sellAlerts?: SellSignalAlertState[];
+      };
+      setManualPositions((positions) => [
+        body.position,
+        ...positions.filter((position) => position.signalId !== body.position.signalId)
+      ]);
+      setSellAlerts(body.sellAlerts ?? []);
+      setTradeMessage("已标记买入，开始监测卖出信号。");
+    } catch {
+      setTradeMessage("标记买入失败，请检查 API 服务。");
+    } finally {
+      setMarkingSignalId(null);
     }
   }
 
@@ -152,6 +247,10 @@ export function App({ now = new Date() }: AppProps = {}) {
               <dd>{monitoring ? `${monitoring.signals}/${monitoring.orders}/${monitoring.fills}` : "0/0/0"}</dd>
             </div>
             <div>
+              <dt>短线/人工/卖出提醒</dt>
+              <dd>{`${shortTermSignals.length}/${manualPositions.length}/${sellAlerts.length}`}</dd>
+            </div>
+            <div>
               <dt>组合权益</dt>
               <dd>{money(monitoring?.totalEquity ?? 100000)}</dd>
             </div>
@@ -176,6 +275,74 @@ export function App({ now = new Date() }: AppProps = {}) {
             </ol>
           </div>
         </aside>
+      </section>
+
+      <section className="signalGrid">
+        <section className="panel signalPanel">
+          <div className="panelHeader signalHeader">
+            <div>
+              <h2>短线信号中心</h2>
+              <p>AI 虚拟交易提示</p>
+            </div>
+            <span className="signalCounter">{shortTermSignals.length} 条</span>
+          </div>
+          <p className="tradeMessage" aria-live="polite">
+            {tradeMessage}
+          </p>
+          {shortTermSignals.length > 0 ? (
+            <div className="signalList">
+              {shortTermSignals.map((signal) => (
+                <ShortTermSignalItem
+                  isMarked={manualPositions.some((position) => position.signalId === signal.id)}
+                  isMarking={markingSignalId === signal.id}
+                  key={signal.id}
+                  onManualBuy={markManualBuy}
+                  signal={signal}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="emptyState">暂无达到阈值的短线买入信号。</p>
+          )}
+        </section>
+
+        <section className="panel holdingPanel">
+          <h2>人工持仓监控</h2>
+          {manualPositions.length > 0 ? (
+            <ul className="positionList">
+              {manualPositions.map((position) => (
+                <li key={position.id}>
+                  <strong>
+                    {position.symbol} {position.quantity} 股，成本 {price(position.entryPrice)}
+                  </strong>
+                  <span>止损观察 {price(position.stopLossPrice)}，状态：{positionStatusLabel(position.status)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="emptyState">尚未标记买入，等待短线信号确认。</p>
+          )}
+          <div className="sellAlertBox">
+            <h3>卖出提醒</h3>
+            {sellAlerts.length > 0 ? (
+              <ul className="positionList">
+                {sellAlerts.map((alert) => (
+                  <li className="sellAlert" key={alert.id}>
+                    <strong>
+                      {alert.symbol}：{alert.action}
+                    </strong>
+                    <span>
+                      {alert.reason}，现价 {price(alert.currentPrice)}
+                    </span>
+                    <small>{alert.basis.join("；")}</small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="emptyState">{manualPositions.length > 0 ? "暂无卖出提醒，继续监测。" : "等待手动买入后开始监测。"}</p>
+            )}
+          </div>
+        </section>
       </section>
 
       <section className="grid three">
@@ -235,6 +402,59 @@ export function App({ now = new Date() }: AppProps = {}) {
         </section>
       </section>
     </main>
+  );
+}
+
+function ShortTermSignalItem({
+  isMarked,
+  isMarking,
+  onManualBuy,
+  signal
+}: {
+  isMarked: boolean;
+  isMarking: boolean;
+  onManualBuy: (signal: ShortTermBuySignalState) => Promise<void>;
+  signal: ShortTermBuySignalState;
+}) {
+  const buttonText = isMarked ? "已标记买入" : isMarking ? "标记中..." : "标记已买入";
+
+  return (
+    <article className="signalItem">
+      <div className="signalTop">
+        <div>
+          <strong>{signal.symbol}</strong>
+          <time>{formatAuditTime(signal.timestamp)}</time>
+        </div>
+        <span className="signalBadge">{signal.recommendation}</span>
+      </div>
+      <div className="signalFacts">
+        <p>现价：{price(signal.currentPrice)}</p>
+        <p>置信度：{signal.confidenceScore}</p>
+        <p>建议仓位：{percent(signal.suggestedPositionPct)}</p>
+        <p>止损观察：{price(signal.stopLossPrice)}</p>
+      </div>
+      <div className="signalColumns">
+        <div>
+          <h3>购买依据</h3>
+          <ul>
+            {signal.basis.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h3>风险边界</h3>
+          <ul>
+            {signal.riskNotes.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <button className="secondary" onClick={() => void onManualBuy(signal)} disabled={isMarked || isMarking}>
+        {buttonText}
+      </button>
+    </article>
   );
 }
 
@@ -317,6 +537,7 @@ function auditActionLabel(action: string): string {
   if (action === "risk_checked") return "风控校验";
   if (action === "virtual_fill_created") return "虚拟成交";
   if (action === "strategy_parameters_hot_updated") return "策略热更新";
+  if (action === "manual_buy_marked") return "手动标记买入";
   return action;
 }
 
@@ -334,7 +555,17 @@ function auditEventSummary(event: AuditEventState): string {
     return `策略参数已修改：${event.entityId}`;
   }
 
+  if (event.action === "manual_buy_marked") {
+    return `已标记买入：${event.details.symbol ?? event.entityId}，${event.details.quantity ?? 0} 股`;
+  }
+
   return `${auditActionLabel(event.action)}：${event.entityId}`;
+}
+
+function positionStatusLabel(status: ManualPositionState["status"]): string {
+  if (status === "monitoring") return "监测中";
+  if (status === "sell_alerted") return "已触发卖出提醒";
+  return "已关闭";
 }
 
 function formatAuditTime(timestamp: string): string {
@@ -392,6 +623,10 @@ function stepState(done: boolean, active: boolean): "done" | "active" | "pending
 
 function money(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function price(value: number): string {
+  return value.toFixed(2);
 }
 
 function percent(value: number): string {

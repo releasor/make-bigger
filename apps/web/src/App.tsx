@@ -1,4 +1,4 @@
-import { getAShareMarketSession } from "@itrade/domain";
+import { getAShareMarketSession, type AShareMarketSession } from "@itrade/domain";
 import { useEffect, useState } from "react";
 import "./styles.css";
 
@@ -36,12 +36,14 @@ interface AppProps {
 }
 
 export function App({ now = new Date() }: AppProps = {}) {
+  const marketSession = getAShareMarketSession(now);
+  const runCopy = getRunCopy(marketSession);
   const [mode, setMode] = useState<Mode>("rules");
   const [monitoring, setMonitoring] = useState<MonitoringState | null>(null);
   const [report, setReport] = useState<DailyReportState | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEventState[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [runMessage, setRunMessage] = useState("尚未运行虚拟盘");
+  const [runMessage, setRunMessage] = useState(runCopy.idle);
 
   async function refresh() {
     const monitoringResponse = await fetch("/api/monitoring");
@@ -61,14 +63,14 @@ export function App({ now = new Date() }: AppProps = {}) {
 
   async function runSimulation() {
     setIsRunning(true);
-    setRunMessage("正在运行虚拟盘...");
+    setRunMessage(runCopy.running);
 
     try {
       const simulationResponse = await fetch("/api/simulation/run", { method: "POST" });
       if (!simulationResponse.ok) throw new Error("simulation failed");
 
       const latestMonitoring = await refresh();
-      setRunMessage(`虚拟盘已完成，监控数据已刷新。审计事件：${latestMonitoring.auditEvents}`);
+      setRunMessage(`${runCopy.done}。审计事件：${latestMonitoring.auditEvents}`);
     } catch {
       setRunMessage("虚拟盘运行失败，请检查 API 服务。");
     } finally {
@@ -87,7 +89,6 @@ export function App({ now = new Date() }: AppProps = {}) {
   const latestOperation = isRunning ? "执行请求中" : latestAuditEvent ? auditActionLabel(latestAuditEvent.action) : "等待指令";
   const displayStatus = getDisplayStatus(monitoring?.status, isRunning, report);
   const timeline = buildRunTimeline(isRunning, monitoring, report, auditEvents);
-  const marketSession = getAShareMarketSession(now);
 
   return (
     <main className="shell">
@@ -98,7 +99,7 @@ export function App({ now = new Date() }: AppProps = {}) {
         </div>
         <div className="runControls">
           <button className="primary" onClick={runSimulation} disabled={isRunning}>
-            {isRunning ? "运行中..." : "运行虚拟盘"}
+            {isRunning ? runCopy.activeButton : runCopy.button}
           </button>
           <p className="runStatus" role="status" aria-live="polite">
             {runMessage}
@@ -266,6 +267,36 @@ function AiMode() {
       <textarea aria-label="AI 策略修改请求" placeholder="例如：把买入条件改成趋势突破，并降低单票仓位。" />
     </div>
   );
+}
+
+function getRunCopy(marketSession: AShareMarketSession) {
+  if (marketSession.isOpen) {
+    return {
+      button: "运行虚拟盘",
+      activeButton: "运行中...",
+      idle: "交易时间：可运行虚拟盘。",
+      running: "正在运行虚拟盘...",
+      done: "虚拟盘已完成，监控数据已刷新"
+    };
+  }
+
+  if (marketSession.code === "after_market") {
+    return {
+      button: "生成盘后复盘",
+      activeButton: "生成中...",
+      idle: "休盘时间：可生成盘后复盘，不触发实时交易。",
+      running: "正在生成盘后复盘...",
+      done: "盘后复盘已生成，监控数据已刷新"
+    };
+  }
+
+  return {
+    button: "运行历史回放",
+    activeButton: "回放中...",
+    idle: "休盘时间：可运行历史回放，不触发实时交易。",
+    running: "正在运行历史回放...",
+    done: "历史回放已完成，监控数据已刷新"
+  };
 }
 
 function getRuntimePhase(isRunning: boolean, report: DailyReportState | null): string {

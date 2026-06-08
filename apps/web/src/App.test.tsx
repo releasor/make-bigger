@@ -93,15 +93,23 @@ describe("App API integration", () => {
 
     await waitFor(() => expect(screen.getByText("市场状态：休盘时间")).toBeInTheDocument());
     expect(screen.getByText("当前时段：盘后休市")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成盘后复盘" })).toBeInTheDocument();
     expect(screen.getByText("盘后分析")).toBeInTheDocument();
     expect(screen.getByText("今日虚拟盘收益：0.25%")).toBeInTheDocument();
     expect(screen.getByText("复盘结论：策略今日达标")).toBeInTheDocument();
   });
 
+  it("keeps the virtual trading label during trading hours", async () => {
+    renderApp(new Date("2026-06-08T10:00:00+08:00"));
+
+    await waitFor(() => expect(screen.getByText("市场状态：交易时间")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "运行虚拟盘" })).toBeInTheDocument();
+  });
+
   it("calls the simulation endpoint when running virtual trading", async () => {
     renderApp();
 
-    fireEvent.click(screen.getByRole("button", { name: "运行虚拟盘" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成盘后复盘" }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/simulation/run", { method: "POST" });
@@ -111,16 +119,16 @@ describe("App API integration", () => {
   it("shows visible feedback after virtual trading finishes", async () => {
     renderApp();
 
-    fireEvent.click(screen.getByRole("button", { name: "运行虚拟盘" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成盘后复盘" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("status")).toHaveTextContent("虚拟盘已完成，监控数据已刷新");
+      expect(screen.getByRole("status")).toHaveTextContent("盘后复盘已生成，监控数据已刷新");
     });
   });
 });
 
-function renderApp() {
-  return render(<App now={new Date("2026-06-08T21:13:30+08:00")} />);
+function renderApp(now = new Date("2026-06-08T21:13:30+08:00")) {
+  return render(<App now={now} />);
 }
 
 function json(body: unknown): Response {

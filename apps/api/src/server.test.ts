@@ -98,6 +98,21 @@ describe("api server", () => {
     expect(body.dailyBars).toBeGreaterThan(0);
     expect(body.minuteBars).toBeGreaterThan(0);
   });
+
+  it("returns a short-term intelligence report with external source status", async () => {
+    const server = buildServer({ marketDataProvider: fakeMarketDataProvider() });
+
+    const response = await server.inject({ method: "GET", url: "/api/intelligence/short-term" });
+    const body = response.json();
+
+    expect(response.statusCode).toBe(200);
+    expect(body.report.title).toBe("短线情报与决策中枢");
+    expect(body.report.outlook).toContain("短期");
+    expect(body.report.externalIntelStatuses).toContainEqual(
+      expect.objectContaining({ source: "dragon_tiger", status: "not_configured" })
+    );
+    expect(body.report.reasons.join(" ")).toContain("真实来源未配置");
+  });
 });
 
 function fakeMarketDataProvider(): MarketDataProvider {

@@ -5,3 +5,4 @@ export * from "./riskEngine";
 export * from "./virtualTrading";
 export * from "./reporting";
 export * from "./shortTermSignals";
+export * from "./shortTermIntelligence";

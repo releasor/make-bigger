@@ -89,6 +89,84 @@ interface MarketDataStatusState {
   minuteBars: number;
 }
 
+type ExternalIntelAvailabilityState = "available" | "empty" | "unavailable" | "not_configured";
+
+interface ExternalIntelStatusState {
+  source: "dragon_tiger" | "news" | "theme" | "announcement";
+  label: string;
+  status: ExternalIntelAvailabilityState;
+  provider: string;
+  message: string;
+  updatedAt?: string;
+  itemCount: number;
+}
+
+interface MarketSentimentSnapshotState {
+  temperatureScore: number;
+  trendLabel: "偏强" | "中性" | "偏弱";
+  risingCount: number;
+  fallingCount: number;
+  trendUpCount: number;
+  strongCount: number;
+  volumeActiveCount: number;
+  averageVolumeRatio: number;
+  reasons: string[];
+}
+
+interface SectorRotationItemState {
+  sector: string;
+  sampleSize: number;
+  strengthScore: number;
+  persistenceScore: number;
+  sampleQuality: "样本充足" | "样本不足";
+  direction: "领涨" | "轮动" | "退潮";
+  representativeSymbols: string[];
+  reasons: string[];
+}
+
+interface StrongStockCandidateState {
+  symbol: string;
+  sector: string;
+  latestPrice: number;
+  trendScore: number;
+  volumeScore: number;
+  abnormalScore: number;
+  totalScore: number;
+  labels: string[];
+  basis: string[];
+  riskNotes: string[];
+}
+
+interface RiskSignalState {
+  id: string;
+  level: "low" | "medium" | "high";
+  title: string;
+  reason: string;
+  suggestion: string;
+  symbol?: string;
+}
+
+interface ShortTermIntelligenceReportState {
+  title: "短线情报与决策中枢";
+  generatedAt: string;
+  outlook: string;
+  actionPlan: {
+    mode: "进攻观察" | "精选跟踪" | "防守观望";
+    positionTone: string;
+    operationAdvice: string[];
+    followUp: string[];
+  };
+  sentiment: MarketSentimentSnapshotState;
+  sectorRotation: SectorRotationItemState[];
+  watchlist: StrongStockCandidateState[];
+  nearAbnormal: StrongStockCandidateState[];
+  riskSignals: RiskSignalState[];
+  externalIntelStatuses: ExternalIntelStatusState[];
+  externalIntelItems: unknown[];
+  conclusion: string;
+  reasons: string[];
+}
+
 interface AppProps {
   now?: Date;
 }
@@ -106,6 +184,7 @@ export function App({ now = new Date() }: AppProps = {}) {
   const [manualPositions, setManualPositions] = useState<ManualPositionState[]>([]);
   const [sellAlerts, setSellAlerts] = useState<SellSignalAlertState[]>([]);
   const [marketData, setMarketData] = useState<MarketDataStatusState | null>(null);
+  const [intelligenceReport, setIntelligenceReport] = useState<ShortTermIntelligenceReportState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [markingSignalId, setMarkingSignalId] = useState<string | null>(null);
   const [runMessage, setRunMessage] = useState(runCopy.idle);
@@ -127,6 +206,10 @@ export function App({ now = new Date() }: AppProps = {}) {
     const marketDataResponse = await fetch("/api/market-data/status");
     const marketDataBody = (await marketDataResponse.json()) as MarketDataStatusState;
     setMarketData(marketDataBody);
+
+    const intelligenceResponse = await fetch("/api/intelligence/short-term");
+    const intelligenceBody = (await intelligenceResponse.json()) as { report?: ShortTermIntelligenceReportState };
+    setIntelligenceReport(intelligenceBody.report ?? null);
 
     const shortTermResponse = await fetch("/api/short-term/signals");
     const shortTermBody = (await shortTermResponse.json()) as { signals?: ShortTermBuySignalState[] };
@@ -311,6 +394,8 @@ export function App({ now = new Date() }: AppProps = {}) {
         </aside>
       </section>
 
+      <ShortTermIntelligencePanel report={intelligenceReport} />
+
       <section className="signalGrid">
         <section className="panel signalPanel">
           <div className="panelHeader signalHeader">
@@ -436,6 +521,130 @@ export function App({ now = new Date() }: AppProps = {}) {
         </section>
       </section>
     </main>
+  );
+}
+
+function ShortTermIntelligencePanel({ report }: { report: ShortTermIntelligenceReportState | null }) {
+  if (!report) {
+    return (
+      <section className="panel intelligencePanel" aria-label="短线情报中枢">
+        <div className="panelHeader">
+          <div>
+            <h2>短线情报中枢</h2>
+            <p>正在等待行情和外部情报状态。</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel intelligencePanel" aria-label="短线情报中枢">
+      <div className="panelHeader intelligenceHeader">
+        <div>
+          <h2>短线情报中枢</h2>
+          <p>{report.outlook}</p>
+        </div>
+        <div className="temperatureDial">
+          <span>情绪温度</span>
+          <strong>{report.sentiment.temperatureScore}</strong>
+          <small>{report.sentiment.trendLabel}</small>
+        </div>
+      </div>
+
+      <div className="sentimentStrip">
+        <p>操作建议：{report.actionPlan.mode}</p>
+        <p>{report.actionPlan.positionTone}</p>
+        <p>
+          上涨/下跌：{report.sentiment.risingCount}/{report.sentiment.fallingCount}，放量：
+          {report.sentiment.volumeActiveCount}
+        </p>
+      </div>
+
+      <div className="intelGrid">
+        <section>
+          <h3>板块轮动</h3>
+          <ul className="sectorList">
+            {report.sectorRotation.length > 0 ? (
+              report.sectorRotation.slice(0, 4).map((sector) => (
+                <li key={sector.sector}>
+                  <div>
+                    <strong>{sector.sector}</strong>
+                    <span>{sector.direction}</span>
+                  </div>
+                  <p>
+                    强度 {sector.strengthScore}，持续性 {sector.persistenceScore}，{sector.sampleQuality}
+                  </p>
+                  <small>{sector.representativeSymbols.slice(0, 3).join("、") || "暂无代表股"}</small>
+                </li>
+              ))
+            ) : (
+              <li className="emptyState">暂无可计算板块。</li>
+            )}
+          </ul>
+        </section>
+
+        <section>
+          <h3>重点跟踪对象</h3>
+          <ul className="watchList">
+            {report.watchlist.length > 0 ? (
+              report.watchlist.slice(0, 4).map((candidate) => (
+                <li key={candidate.symbol}>
+                  <div>
+                    <strong>{candidate.symbol}</strong>
+                    <span>{candidate.totalScore}</span>
+                  </div>
+                  <p>
+                    {candidate.sector}，现价 {price(candidate.latestPrice)}
+                  </p>
+                  <small>{candidate.labels.join("、") || "观察"}</small>
+                </li>
+              ))
+            ) : (
+              <li className="emptyState">暂无重点跟踪对象。</li>
+            )}
+          </ul>
+        </section>
+
+        <section>
+          <h3>外部情报状态</h3>
+          <ul className="sourceStatusList">
+            {report.externalIntelStatuses.map((status) => (
+              <li className={status.status} key={status.source}>
+                <strong>
+                  {status.label}：{externalStatusLabel(status.status)}
+                </strong>
+                <span>{status.message}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section>
+          <h3>风险信号</h3>
+          <ul className="riskList">
+            {report.riskSignals.length > 0 ? (
+              report.riskSignals.slice(0, 4).map((risk) => (
+                <li className={risk.level} key={risk.id}>
+                  <strong>
+                    {risk.symbol ? `${risk.symbol}：` : ""}
+                    {risk.title}
+                  </strong>
+                  <span>{risk.suggestion}</span>
+                </li>
+              ))
+            ) : (
+              <li className="emptyState">暂无高优先级风险。</li>
+            )}
+          </ul>
+        </section>
+      </div>
+
+      <div className="intelConclusion">
+        <strong>{report.conclusion}</strong>
+        <p>{report.reasons.slice(0, 2).join("；")}</p>
+      </div>
+    </section>
   );
 }
 
@@ -659,6 +868,13 @@ function dataRealityLabel(marketData: MarketDataStatusState): string {
   if (!marketData.source.isReal) return "样例数据";
   if (marketData.source.cacheHit) return "真实缓存";
   return "真实数据";
+}
+
+function externalStatusLabel(status: ExternalIntelAvailabilityState): string {
+  if (status === "available") return "已接入";
+  if (status === "empty") return "暂无事件";
+  if (status === "unavailable") return "不可用";
+  return "未配置";
 }
 
 function money(value: number): string {

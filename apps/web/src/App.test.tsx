@@ -51,6 +51,103 @@ describe("App API integration", () => {
             minuteBars: 240
           });
         }
+        if (url.endsWith("/api/intelligence/short-term")) {
+          return json({
+            report: {
+              title: "短线情报与决策中枢",
+              generatedAt: "2026-06-08T15:30:00.000+08:00",
+              outlook: "短期情绪中性，银行有局部表现，等待强势股二次确认。",
+              actionPlan: {
+                mode: "精选跟踪",
+                positionTone: "虚拟盘以观察为主，只记录特别清晰的信号。",
+                operationAdvice: ["不追涨，只等待回踩确认或二次放量"],
+                followUp: ["继续观察板块轮动"]
+              },
+              sentiment: {
+                temperatureScore: 62,
+                trendLabel: "中性",
+                risingCount: 1,
+                fallingCount: 1,
+                trendUpCount: 1,
+                strongCount: 1,
+                volumeActiveCount: 1,
+                averageVolumeRatio: 1.45,
+                reasons: ["1/2 只观察股上涨"]
+              },
+              sectorRotation: [
+                {
+                  sector: "银行",
+                  sampleSize: 2,
+                  strengthScore: 68,
+                  persistenceScore: 70,
+                  sampleQuality: "样本充足",
+                  direction: "轮动",
+                  representativeSymbols: ["000001.SZ"],
+                  reasons: ["板块平均强度 68"]
+                }
+              ],
+              watchlist: [
+                {
+                  symbol: "000001.SZ",
+                  sector: "银行",
+                  latestPrice: 10.34,
+                  trendScore: 55,
+                  volumeScore: 25,
+                  abnormalScore: 15,
+                  totalScore: 95,
+                  labels: ["趋势突破", "放量", "接近异动"],
+                  basis: ["现价高于 MA20"],
+                  riskNotes: ["按虚拟盘纪律设置止损"]
+                }
+              ],
+              nearAbnormal: [
+                {
+                  symbol: "000001.SZ",
+                  sector: "银行",
+                  latestPrice: 10.34,
+                  trendScore: 55,
+                  volumeScore: 25,
+                  abnormalScore: 15,
+                  totalScore: 95,
+                  labels: ["接近异动"],
+                  basis: ["涨幅接近短线异动阈值"],
+                  riskNotes: ["按虚拟盘纪律设置止损"]
+                }
+              ],
+              riskSignals: [
+                {
+                  id: "risk-1",
+                  level: "medium",
+                  title: "放量追高风险",
+                  reason: "短线量能快速放大。",
+                  suggestion: "等待回踩确认。",
+                  symbol: "000001.SZ"
+                }
+              ],
+              externalIntelStatuses: [
+                {
+                  source: "dragon_tiger",
+                  label: "龙虎榜",
+                  status: "not_configured",
+                  provider: "official-exchange-provider",
+                  message: "龙虎榜真实来源尚未配置，本次不生成席位结论。",
+                  itemCount: 0
+                },
+                {
+                  source: "news",
+                  label: "新闻催化",
+                  status: "not_configured",
+                  provider: "verified-news-provider",
+                  message: "新闻真实来源尚未配置，本次不编造新闻催化。",
+                  itemCount: 0
+                }
+              ],
+              externalIntelItems: [],
+              conclusion: "核心结论：当前建议为精选跟踪，重点跟踪 000001.SZ。",
+              reasons: ["龙虎榜、新闻催化真实来源未配置，相关结论保持空缺"]
+            }
+          });
+        }
         if (url.endsWith("/api/short-term/signals")) {
           return json({
             signals: [
@@ -150,6 +247,18 @@ describe("App API integration", () => {
     expect(screen.getByText("日线/分钟：4/240")).toBeInTheDocument();
   });
 
+  it("shows the short-term intelligence center with action reasons and source status", async () => {
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText("短线情报中枢")).toBeInTheDocument());
+    expect(screen.getByText("操作建议：精选跟踪")).toBeInTheDocument();
+    expect(screen.getAllByText("银行").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("000001.SZ").length).toBeGreaterThan(0);
+    expect(screen.getByText("龙虎榜：未配置")).toBeInTheDocument();
+    expect(screen.getByText("新闻催化：未配置")).toBeInTheDocument();
+    expect(screen.getByText("核心结论：当前建议为精选跟踪，重点跟踪 000001.SZ。")).toBeInTheDocument();
+  });
+
   it("shows closed market status and after-market analysis outside trading hours", async () => {
     renderApp();
 
@@ -193,7 +302,7 @@ describe("App API integration", () => {
 
     await waitFor(() => expect(screen.getByText("短线信号中心")).toBeInTheDocument());
     expect(screen.getByText("AI 虚拟交易提示")).toBeInTheDocument();
-    expect(screen.getByText("000001.SZ")).toBeInTheDocument();
+    expect(screen.getAllByText("000001.SZ").length).toBeGreaterThan(0);
     expect(screen.getByText("特别值得关注")).toBeInTheDocument();
     expect(screen.getByText("建议仓位：10.00%")).toBeInTheDocument();
     expect(screen.getByText("购买依据")).toBeInTheDocument();

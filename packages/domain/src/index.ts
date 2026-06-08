@@ -88,6 +88,99 @@ export interface ShortTermBuySignal {
   riskNotes: string[];
 }
 
+export type ExternalIntelSource = "dragon_tiger" | "news" | "theme" | "announcement";
+export type ExternalIntelAvailability = "available" | "empty" | "unavailable" | "not_configured";
+
+export interface ExternalIntelStatus {
+  source: ExternalIntelSource;
+  label: string;
+  status: ExternalIntelAvailability;
+  provider: string;
+  message: string;
+  updatedAt?: string;
+  itemCount: number;
+}
+
+export interface MarketSentimentSnapshot {
+  temperatureScore: number;
+  trendLabel: "偏强" | "中性" | "偏弱";
+  risingCount: number;
+  fallingCount: number;
+  trendUpCount: number;
+  strongCount: number;
+  volumeActiveCount: number;
+  averageVolumeRatio: number;
+  reasons: string[];
+}
+
+export interface SectorRotationItem {
+  sector: string;
+  sampleSize: number;
+  strengthScore: number;
+  persistenceScore: number;
+  sampleQuality: "样本充足" | "样本不足";
+  direction: "领涨" | "轮动" | "退潮";
+  representativeSymbols: string[];
+  reasons: string[];
+}
+
+export interface StrongStockCandidate {
+  symbol: string;
+  sector: string;
+  latestPrice: number;
+  trendScore: number;
+  volumeScore: number;
+  abnormalScore: number;
+  totalScore: number;
+  labels: string[];
+  basis: string[];
+  riskNotes: string[];
+}
+
+export interface RiskSignal {
+  id: string;
+  level: "low" | "medium" | "high";
+  title: string;
+  reason: string;
+  suggestion: string;
+  symbol?: string;
+}
+
+export interface ExternalIntelItem {
+  id: string;
+  source: ExternalIntelSource;
+  title: string;
+  timestamp: string;
+  provider: string;
+  credibility: "verified" | "reported" | "unverified";
+  relatedSymbols: string[];
+  summary: string;
+  url?: string;
+}
+
+export interface ShortTermActionPlan {
+  mode: "进攻观察" | "精选跟踪" | "防守观望";
+  positionTone: string;
+  operationAdvice: string[];
+  followUp: string[];
+}
+
+export interface ShortTermIntelligenceReport {
+  title: "短线情报与决策中枢";
+  generatedAt: string;
+  outlook: string;
+  actionPlan: ShortTermActionPlan;
+  sentiment: MarketSentimentSnapshot;
+  sectorRotation: SectorRotationItem[];
+  watchlist: StrongStockCandidate[];
+  nearAbnormal: StrongStockCandidate[];
+  riskSignals: RiskSignal[];
+  externalIntelStatuses: ExternalIntelStatus[];
+  externalIntelItems: ExternalIntelItem[];
+  conclusion: string;
+  reasons: string[];
+}
+
 export interface ManualPosition {
   id: string;
   signalId: string;

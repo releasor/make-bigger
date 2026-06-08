@@ -4,10 +4,12 @@ import {
   type AuditEvent,
   type ManualPosition,
   type SellSignalAlert,
+  type ShortTermIntelligenceReport,
   type ShortTermBuySignal,
   type StrategyDefinition
 } from "@itrade/domain";
 import {
+  buildShortTermIntelligenceReport,
   buildDailyReport,
   createCachedMarketDataProvider,
   createManualPositionFromSignal,
@@ -30,6 +32,7 @@ interface AppState {
   report: DailyReport | null;
   auditEvents: AuditEvent[];
   shortTermSignals: ShortTermBuySignal[];
+  shortTermIntelligenceReport: ShortTermIntelligenceReport | null;
   manualPositions: ManualPosition[];
   sellAlerts: SellSignalAlert[];
   marketDataSnapshot: MarketDataSnapshot | null;
@@ -61,6 +64,7 @@ export function buildServer(options: BuildServerOptions = {}) {
     report: null,
     auditEvents: [],
     shortTermSignals: [],
+    shortTermIntelligenceReport: null,
     manualPositions: [],
     sellAlerts: [],
     marketDataSnapshot: null
@@ -83,6 +87,15 @@ export function buildServer(options: BuildServerOptions = {}) {
     };
   });
 
+  server.get("/api/intelligence/short-term", async () => {
+    const report = await refreshShortTermIntelligenceReport();
+
+    return {
+      report,
+      source: state.marketDataSnapshot?.source
+    };
+  });
+
   server.post("/api/strategies/:id/parameters", async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<StrategyDefinition["parameters"]>;
@@ -99,6 +112,10 @@ export function buildServer(options: BuildServerOptions = {}) {
 
   server.post("/api/simulation/run", async () => {
     const bars = await refreshMarketData();
+    state.shortTermIntelligenceReport = buildShortTermIntelligenceReport({
+      snapshot: bars,
+      sectorMap: defaultSectorMap()
+    });
     const result = runVirtualTradingSession({
       strategies: state.strategies,
       bars: bars.minute,
@@ -167,6 +184,7 @@ export function buildServer(options: BuildServerOptions = {}) {
     totalEquity: state.lastRun?.portfolio.totalEquity ?? 100000,
     auditEvents: state.auditEvents.length,
     shortTermSignals: state.shortTermSignals.length,
+    intelligenceGenerated: state.shortTermIntelligenceReport ? 1 : 0,
     manualPositions: state.manualPositions.length,
     sellAlerts: state.sellAlerts.length,
     dataProvider: state.marketDataSnapshot?.source.provider ?? "loading",
@@ -192,10 +210,30 @@ export function buildServer(options: BuildServerOptions = {}) {
 
     return state.shortTermSignals;
   }
+
+  async function refreshShortTermIntelligenceReport(): Promise<ShortTermIntelligenceReport> {
+    state.shortTermIntelligenceReport = buildShortTermIntelligenceReport({
+      snapshot: await refreshMarketData(),
+      sectorMap: defaultSectorMap()
+    });
+
+    return state.shortTermIntelligenceReport;
+  }
 }
 
 function defaultMarketDataCacheFile(): string {
   return fileURLToPath(new URL("../../../tmp/market-data-cache/eastmoney-snapshot.json", import.meta.url));
+}
+
+function defaultSectorMap(): Record<string, string> {
+  return {
+    "000001.SZ": "银行",
+    "600000.SH": "银行",
+    "300750.SZ": "新能源",
+    "002594.SZ": "新能源",
+    "601318.SH": "保险",
+    "600519.SH": "白酒"
+  };
 }
 
 function audit(

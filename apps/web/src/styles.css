@@ -377,6 +377,169 @@ h3 {
   margin-bottom: 16px;
 }
 
+.intelligencePanel {
+  margin-bottom: 16px;
+}
+
+.intelligenceHeader p {
+  color: #344456;
+  margin-bottom: 0;
+  max-width: 760px;
+}
+
+.temperatureDial {
+  align-items: center;
+  border-left: 1px solid #dce3eb;
+  display: grid;
+  gap: 2px;
+  min-width: 104px;
+  padding-left: 16px;
+  text-align: right;
+}
+
+.temperatureDial span,
+.temperatureDial small {
+  color: #5f7085;
+  font-size: 12px;
+}
+
+.temperatureDial strong {
+  color: #116a75;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.sentimentStrip {
+  border-bottom: 1px solid #e5ebf2;
+  border-top: 1px solid #e5ebf2;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(220px, 1.3fr) minmax(180px, 1fr);
+  margin-bottom: 16px;
+  padding: 12px 0;
+}
+
+.sentimentStrip p {
+  color: #344456;
+  font-size: 13px;
+  margin: 0;
+}
+
+.sentimentStrip p:first-child {
+  color: #172033;
+  font-weight: 700;
+}
+
+.intelGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.intelGrid section {
+  border-top: 3px solid #dce3eb;
+  min-width: 0;
+  padding-top: 10px;
+}
+
+.intelGrid h3 {
+  margin-bottom: 10px;
+}
+
+.sectorList,
+.watchList,
+.sourceStatusList,
+.riskList {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sectorList li,
+.watchList li,
+.sourceStatusList li,
+.riskList li {
+  border-bottom: 1px solid #eef2f6;
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  padding-bottom: 10px;
+}
+
+.sectorList div,
+.watchList div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sectorList strong,
+.watchList strong,
+.sourceStatusList strong,
+.riskList strong {
+  color: #172033;
+  font-size: 14px;
+}
+
+.sectorList span,
+.watchList span {
+  background: #eef6f7;
+  border-radius: 999px;
+  color: #116a75;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+
+.sectorList p,
+.watchList p,
+.sourceStatusList span,
+.riskList span {
+  color: #4f6b8a;
+  font-size: 13px;
+  margin: 0;
+}
+
+.sectorList small,
+.watchList small {
+  color: #708196;
+  font-size: 12px;
+}
+
+.sourceStatusList li.not_configured strong,
+.sourceStatusList li.unavailable strong,
+.riskList li.high strong {
+  color: #9a3412;
+}
+
+.sourceStatusList li.available strong,
+.riskList li.low strong {
+  color: #0f7a4f;
+}
+
+.riskList li.medium strong {
+  color: #b7791f;
+}
+
+.intelConclusion {
+  border-top: 1px solid #e5ebf2;
+  margin-top: 16px;
+  padding-top: 12px;
+}
+
+.intelConclusion strong {
+  color: #172033;
+}
+
+.intelConclusion p {
+  color: #4f6b8a;
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
 .signalHeader {
   margin-bottom: 10px;
 }
@@ -557,7 +720,9 @@ textarea {
   .grid,
   .grid.three,
   .signalGrid,
-  .signalColumns {
+  .signalColumns,
+  .sentimentStrip,
+  .intelGrid {
     grid-template-columns: 1fr;
   }
 

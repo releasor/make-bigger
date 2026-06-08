@@ -25,19 +25,36 @@ export function App() {
   const [mode, setMode] = useState<Mode>("rules");
   const [monitoring, setMonitoring] = useState<MonitoringState | null>(null);
   const [report, setReport] = useState<DailyReportState | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [runMessage, setRunMessage] = useState("尚未运行虚拟盘");
 
   async function refresh() {
     const monitoringResponse = await fetch("/api/monitoring");
-    setMonitoring(await monitoringResponse.json());
+    const monitoringBody = (await monitoringResponse.json()) as MonitoringState;
+    setMonitoring(monitoringBody);
 
     const reportResponse = await fetch("/api/report/daily");
     const reportBody = await reportResponse.json();
     setReport(reportBody.report);
+
+    return monitoringBody;
   }
 
   async function runSimulation() {
-    await fetch("/api/simulation/run", { method: "POST" });
-    await refresh();
+    setIsRunning(true);
+    setRunMessage("正在运行虚拟盘...");
+
+    try {
+      const simulationResponse = await fetch("/api/simulation/run", { method: "POST" });
+      if (!simulationResponse.ok) throw new Error("simulation failed");
+
+      const latestMonitoring = await refresh();
+      setRunMessage(`虚拟盘已完成，监控数据已刷新。审计事件：${latestMonitoring.auditEvents}`);
+    } catch {
+      setRunMessage("虚拟盘运行失败，请检查 API 服务。");
+    } finally {
+      setIsRunning(false);
+    }
   }
 
   useEffect(() => {
@@ -52,9 +69,14 @@ export function App() {
           <p className="eyebrow">iTrade Virtual Desk</p>
           <h1>虚拟交易工作台</h1>
         </div>
-        <button className="primary" onClick={runSimulation}>
-          运行虚拟盘
-        </button>
+        <div className="runControls">
+          <button className="primary" onClick={runSimulation} disabled={isRunning}>
+            {isRunning ? "运行中..." : "运行虚拟盘"}
+          </button>
+          <p className="runStatus" role="status" aria-live="polite">
+            {runMessage}
+          </p>
+        </div>
       </header>
 
       <section className="grid">

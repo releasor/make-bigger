@@ -65,6 +65,16 @@ describe("App API integration", () => {
       expect(fetch).toHaveBeenCalledWith("/api/simulation/run", { method: "POST" });
     });
   });
+
+  it("shows visible feedback after virtual trading finishes", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "运行虚拟盘" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("虚拟盘已完成，监控数据已刷新");
+    });
+  });
 });
 
 function json(body: unknown): Response {

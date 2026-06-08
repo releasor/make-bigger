@@ -1,376 +1,378 @@
-# AI-Driven A-Share Virtual Trading Platform Design
+﻿# AI 驱动的 A 股虚拟交易平台设计
 
-Date: 2026-06-08
+日期：2026-06-08
 
-## Goal
+## 目标
 
-Build an AI-driven A-share trading research platform that starts with virtual trading and is designed to evolve into controlled live trading after broker adapters, compliance checks, and operational controls are ready.
+构建一个 AI 驱动的 A 股交易研究平台。平台从虚拟交易开始，先验证策略、数据、风控、监控和日报能力；在券商适配器、合规检查、操作流程和风险控制都准备好之后，再逐步演进到受控实盘交易。
 
-The first product direction is not a simple backtesting toy. It is a distributed research-grade platform with virtual trading, multi-strategy portfolio management, real-time monitoring, daily performance reports, batch research tasks, and switchable visual strategy builders.
+第一阶段不是一个简单回测工具，而是一个研究级虚拟交易平台：支持虚拟盘、多策略组合管理、实时监控、每日绩效汇报、批量研究任务，以及可切换的可视化策略搭建器。
 
-## Current Scope
+## 当前范围
 
-In scope for the first major design:
+第一阶段纳入范围：
 
-- Virtual trading, not live broker execution.
-- Intraday quasi-real-time virtual trading plus end-of-day replay and reporting.
-- Daily and minute-level market data support.
-- AI-assisted strategy creation and modification.
-- Multiple switchable visual strategy builders.
-- Multi-strategy portfolio management.
-- Research-grade expansion path for batch backtests and full-market minute-level simulation.
-- Real-time monitoring and extensible alerts.
-- Strategy hot parameter updates, versioned rule publishing, and audit logs.
+- 虚拟交易，不接真实券商下单。
+- 盘中准实时虚拟交易，以及收盘后的复盘和日报。
+- 支持日线和分钟级行情数据。
+- 支持 AI 辅助创建和修改策略。
+- 支持多种可切换的可视化策略搭建方式。
+- 支持多策略组合管理。
+- 为批量回测和全市场分钟级虚拟盘预留研究级扩展路径。
+- 支持实时监控和可扩展告警。
+- 支持策略参数热更新、规则版本发布和审计日志。
 
-Out of scope for the first implementation:
+第一阶段不做：
 
-- Direct live order placement.
-- Specific broker adapter implementation.
-- Fully automated AI changes without user confirmation.
-- Production-grade high-frequency infrastructure.
+- 真实券商下单。
+- 具体券商交易接口实现。
+- AI 未经用户确认直接修改线上策略。
+- 生产级高频交易基础设施。
 
-## Compliance Boundary
+## 合规边界
 
-A-share programmatic trading is regulated. The platform must be designed with reporting, auditability, risk controls, emergency stop controls, and system-management boundaries in mind.
+A 股程序化交易有监管要求。平台设计必须把报告、审计、风控、紧急停止、系统管理和未来合规留痕作为基础能力。
 
-The first version runs virtual trading only. Live trading is a later phase and must go through broker interface validation, user approval gates, risk-control review, and compliance review.
+第一版只运行虚拟交易。实盘交易属于后续阶段，必须经过券商接口验证、用户授权、风控评审和合规评审。
 
-## Recommended Delivery Phases
+## 建议交付阶段
 
-1. Virtual research and trading platform.
-   - Strategy builders.
-   - Data adapters.
-   - Virtual trading.
-   - Monitoring.
-   - Daily reports.
+1. 虚拟研究与交易平台。
+   - 策略搭建器。
+   - 数据适配器。
+   - 虚拟交易。
+   - 实时监控。
+   - 每日报告。
 
-2. Controlled live-trading readiness.
-   - Broker adapter interface.
-   - Manual confirmation mode.
-   - Capital limits.
-   - Audit and emergency stop.
+2. 受控实盘准备阶段。
+   - 券商适配器接口。
+   - 人工确认模式。
+   - 资金上限。
+   - 审计和紧急停止。
 
-3. Fully automated live trading.
-   - Enabled only after the first two phases are stable.
-   - Requires stronger monitoring, operational procedures, and compliance controls.
+3. 全自动实盘阶段。
+   - 仅在前两个阶段稳定后启用。
+   - 需要更强的监控、运维流程和合规控制。
 
-## Architecture Choice
+## 架构选择
 
-Use a distributed research-platform architecture.
+采用分布式研究平台架构。
 
-The MVP may run on one machine or one server as multiple processes, but service boundaries should be explicit from the start. This keeps the system aligned with research-grade scale while avoiding premature cluster deployment.
+MVP 可以先在一台机器或一台服务器上以多进程方式运行，但从一开始就保持清晰的服务边界。这样既能支撑研究级扩展，也能避免第一天就被集群部署复杂度拖住。
 
-### Layers
+## 架构分层
 
-1. User and strategy layer.
-   - Web console.
-   - Switchable visual strategy builders.
-   - AI strategy assistant.
-   - Strategy versioning and publishing.
+### 用户与策略层
 
-2. Trading and research core.
-   - Signal engine.
-   - Virtual trading engine.
-   - Portfolio risk engine.
-   - Batch backtest workers.
-   - Factor research workers.
-   - Real-time monitoring.
-   - Daily reporting and attribution.
+- Web 控制台。
+- 可切换的可视化策略搭建器。
+- AI 策略助手。
+- 策略版本与发布流程。
 
-3. Data and execution layer.
-   - Market data adapters.
-   - Daily and minute-level storage.
-   - Message bus and task queue.
-   - Future broker execution adapters.
+### 交易与研究中枢
 
-## Strategy Definition
+- 信号引擎。
+- 虚拟交易引擎。
+- 组合风控引擎。
+- 批量回测 worker。
+- 因子研究 worker。
+- 实时监控。
+- 每日报告与归因。
 
-Each strategy is stored as one unified strategy definition. Different builders are views and editors for the same underlying object.
+### 数据与执行层
 
-A strategy definition includes:
+- 行情数据适配器。
+- 日线和分钟级数据存储。
+- 消息总线和任务队列。
+- 未来券商执行适配器。
 
-- Strategy id and version.
-- Name, owner, status, and lifecycle state.
-- Universe.
-- Data frequency requirements.
-- Entry rules.
-- Exit rules.
-- Position sizing rules.
-- Portfolio and per-symbol risk rules.
-- Runtime parameters.
-- Backtest and virtual-trading settings.
-- Publication metadata and audit trail.
+## 策略定义
 
-## Switchable Strategy Builders
+每个策略底层保存为一份统一的策略定义。不同搭建器只是同一份策略定义的不同视图和编辑入口。
 
-The platform supports multiple strategy-building modes in the same strategy workspace:
+策略定义包含：
 
-- Structured rules.
-  - Conditions, indicators, actions, and parameters.
-  - This is the most stable first editor and should be the semantic source of truth in the MVP.
+- 策略 id 和版本号。
+- 名称、所属用户、状态和生命周期状态。
+- 股票池。
+- 数据频率要求。
+- 入场规则。
+- 出场规则。
+- 仓位规则。
+- 组合级和单标的风控规则。
+- 运行参数。
+- 回测和虚拟交易设置。
+- 发布元数据和审计记录。
 
-- Canvas modules.
-  - Visual flow of universe, signals, position sizing, exits, and risk controls.
-  - This can start as a view over the strategy definition and later become a full editor.
+## 可切换策略搭建器
 
-- AI assistant.
-  - Generates drafts, explains logic, proposes changes, and summarizes backtest impact.
-  - AI cannot silently change active strategies.
-  - AI changes require user confirmation and then go through the normal publish flow.
+平台在同一个策略工作台里支持三种策略搭建模式：
 
-Switching modes must not alter strategy semantics. If a strategy cannot be represented in one view, that view must show a clear unsupported-state message instead of silently dropping logic.
+- 结构化规则。
+  - 用条件、指标、动作和参数来搭建策略。
+  - 第一版中它是最稳定的主编辑器，也是 MVP 的语义主入口。
 
-## Strategy Modification Model
+- 画布模块。
+  - 用可视化流程展示股票池、信号、仓位、出场和风控。
+  - 第一版可以先作为策略定义的可视化视图，后续再升级为完整编辑器。
 
-The platform supports ongoing changes, but changes must be separated by risk level.
+- AI 助手。
+  - 生成策略草稿、解释策略逻辑、提出修改建议、总结回测影响。
+  - AI 不能静默修改正在运行的策略。
+  - AI 修改必须经过用户确认，然后进入正常发布流程。
 
-### Hot Updates
+切换视图不能改变策略语义。如果某个策略无法被某个视图完整表达，该视图必须明确提示“不支持展示/编辑该逻辑”，不能静默丢弃规则。
 
-These can apply immediately:
+## 策略修改模型
 
-- Position limits.
-- Stop-loss or take-profit thresholds.
-- Signal thresholds.
-- Universe toggles.
-- Strategy enable or disable state.
-- Notification settings.
+平台支持运行中的策略变更，但必须按风险等级分层。
 
-Hot updates are recorded in audit logs and reflected in monitoring and daily reports.
+### 参数热更新
 
-### Published Rule Updates
+以下内容可以立即生效：
 
-These require validation before activation:
+- 仓位限制。
+- 止损或止盈阈值。
+- 信号阈值。
+- 股票池开关。
+- 策略启用或停用状态。
+- 通知设置。
 
-- Buy and sell condition changes.
-- Indicator composition changes.
-- Data frequency changes.
-- Position-sizing algorithm changes.
-- Portfolio risk-rule changes.
+所有热更新都必须写入审计日志，并在监控和日报中体现。
 
-Rule updates should create a draft version, run validation, optionally run shadow simulation or backtest comparison, and only then publish.
+### 规则发布更新
 
-### AI-Assisted Updates
+以下内容必须先校验再激活：
 
-AI may:
+- 买入和卖出条件变化。
+- 指标组合变化。
+- 数据频率变化。
+- 仓位算法变化。
+- 组合风控规则变化。
 
-- Draft changes.
-- Explain expected impact.
-- Generate test cases or backtest scenarios.
-- Compare before and after behavior.
+规则更新需要先创建草稿版本，运行校验，可选影子运行或回测对比，然后才能发布。
 
-AI may not:
+### AI 辅助更新
 
-- Directly modify active strategy versions.
-- Disable risk controls.
-- Publish a strategy without user confirmation.
+AI 可以：
 
-## Virtual Trading Engine
+- 起草修改。
+- 解释预期影响。
+- 生成测试场景或回测方案。
+- 对比修改前后的行为。
 
-The virtual trading engine is designed like a future live trading engine.
+AI 不可以：
 
-Strategies emit standardized signals. The trading engine handles order creation, virtual matching, position updates, cash updates, trade records, and performance events.
+- 直接修改活跃策略版本。
+- 禁用风控。
+- 未经用户确认发布策略。
 
-The engine supports two runtime modes:
+## 虚拟交易引擎
 
-- Intraday quasi-real-time mode.
-  - Uses current or streaming market data where available.
-  - Updates signals, virtual orders, positions, PnL, and risk state during market hours.
+虚拟交易引擎按未来实盘交易引擎的接口设计。
 
-- End-of-day replay mode.
-  - Replays market data after close.
-  - Produces full daily summaries and reconciles intraday records.
+策略只输出标准化信号。交易引擎负责创建订单、虚拟撮合、更新持仓、更新现金、记录成交和生成绩效事件。
 
-Virtual trading should model:
+引擎支持两种运行模式：
 
-- Market, limit, and planned order abstractions where useful.
-- Slippage assumptions.
-- Commission and tax assumptions.
-- Partial fills if supported by the simulator.
-- Suspensions, limit-up, limit-down, missing data, and invalid orders.
+- 盘中准实时模式。
+  - 在可用时使用当前行情或实时行情流。
+  - 在交易时段内更新信号、虚拟订单、持仓、盈亏和风险状态。
 
-## Portfolio Risk Engine
+- 收盘后复盘模式。
+  - 收盘后回放行情数据。
+  - 生成完整日报，并与盘中记录做核对。
 
-The portfolio risk engine sits above individual strategies and manages shared capital and exposure.
+虚拟交易需要建模：
 
-It controls:
+- 市价、限价和计划订单抽象。
+- 滑点假设。
+- 佣金和税费假设。
+- 可选的部分成交。
+- 停牌、涨跌停、缺失数据和无效订单。
 
-- Total capital allocation.
-- Per-strategy capital limits.
-- Per-symbol exposure limits.
-- Industry or sector exposure limits.
-- Maximum drawdown thresholds.
-- Turnover limits.
-- Strategy-level and portfolio-level kill switches.
-- Abnormal signal and order detection.
+## 组合风控引擎
 
-The same risk interface should be usable by virtual trading and future live trading.
+组合风控引擎位于单策略之上，用来统一管理共享资金和组合暴露。
 
-## Real-Time Monitoring
+它控制：
 
-The monitoring center shows:
+- 总资金分配。
+- 单策略资金上限。
+- 单标的暴露上限。
+- 行业或板块暴露上限。
+- 最大回撤阈值。
+- 换手率限制。
+- 策略级和组合级熔断开关。
+- 异常信号和异常订单检测。
 
-- Strategy status.
-- Data freshness and latency.
-- Signal stream.
-- Virtual orders and fills.
-- Positions and cash.
-- Real-time PnL.
-- Risk status.
-- Worker and task health.
-- Alert history.
-- Strategy version currently running.
+同一套风控接口应同时服务虚拟交易和未来实盘交易。
 
-Alerts are designed as an adapter-based system.
+## 实时监控
 
-MVP alert channels:
+监控中心展示：
 
-- In-platform notification center.
-- Dashboard status indicators.
-- Logs and event timeline.
+- 策略状态。
+- 数据新鲜度和延迟。
+- 信号流。
+- 虚拟订单和成交。
+- 持仓和现金。
+- 实时盈亏。
+- 风险状态。
+- worker 和任务健康状态。
+- 告警历史。
+- 当前运行的策略版本。
 
-Future alert channels:
+告警系统按适配器设计。
 
-- Email.
-- DingTalk.
-- WeCom.
-- WeChat integration where available.
-- Other webhook-based channels.
+MVP 告警通道：
 
-## Daily Report
+- 平台内通知中心。
+- 仪表盘状态灯。
+- 日志和事件时间线。
 
-The platform generates daily reports after market close and after end-of-day replay completes.
+后续告警通道：
 
-Daily reports include:
+- 邮件。
+- 钉钉。
+- 企业微信。
+- 可用时接入微信。
+- 其他 webhook 通道。
 
-- Trading win rate.
-- Signal hit rate.
-- Strategy target-achievement rate.
-- Daily return.
-- Cumulative return.
-- Maximum drawdown.
-- Turnover.
-- Strategy contribution.
-- Portfolio attribution.
-- Risk events.
-- Abnormal signals or orders.
-- Version changes and parameter hot updates.
-- Data quality warnings.
+## 每日报告
 
-Definitions:
+平台在收盘后、复盘完成后生成日报。
 
-- Trading win rate: profitable closed trades divided by total closed trades in the reporting window.
-- Signal hit rate: signals whose forward evaluation window moved in the expected direction divided by total evaluated signals.
-- Strategy target-achievement rate: whether configured objectives were met, such as positive return, benchmark outperformance, or drawdown below threshold.
+日报包含：
 
-Reports must make metric windows explicit to avoid ambiguous "success rate" claims.
+- 交易胜率。
+- 信号命中率。
+- 策略达标率。
+- 当日收益。
+- 累计收益。
+- 最大回撤。
+- 换手率。
+- 策略贡献。
+- 组合归因。
+- 风险事件。
+- 异常信号或异常订单。
+- 策略版本变化和参数热更新记录。
+- 数据质量警告。
 
-## Data Layer
+指标定义：
 
-The platform uses replaceable data adapters.
+- 交易胜率：报告窗口内盈利平仓交易数 / 已平仓交易数。
+- 信号命中率：在前向评估窗口内方向正确的信号数 / 已评估信号数。
+- 策略达标率：策略是否满足配置目标，例如收益为正、跑赢基准、回撤低于阈值。
 
-Early prototypes can use free or low-barrier data sources. Later versions can replace these with professional providers or user-owned data.
+报告必须明确指标窗口，避免“成功率”口径含糊。
 
-Supported data categories:
+## 数据层
 
-- Daily bars.
-- Minute bars.
-- Index data.
-- Index constituents.
-- Trading calendar.
-- Corporate actions and adjustment factors.
-- Financial and factor data.
-- Future real-time quote streams.
+平台使用可替换数据适配器。
 
-Data quality checks include:
+原型阶段可以接免费或低门槛数据源。后续可以替换为专业行情源或用户自有数据接口。
 
-- Missing bars.
-- Suspensions.
-- Adjusted and unadjusted price handling.
-- Abnormal prices.
-- Minute-line gaps.
-- Timestamp alignment.
-- Trading calendar consistency.
+支持的数据类别：
 
-## Research Workloads
+- 日线。
+- 分钟线。
+- 指数数据。
+- 指数成分股。
+- 交易日历。
+- 公司行为和复权因子。
+- 财务数据和因子数据。
+- 未来实时行情流。
 
-Research-grade priority order:
+数据质量检查包括：
 
-1. Multi-strategy portfolio management.
-   - Multiple strategies share capital, risk controls, monitoring, and attribution.
+- 缺失 K 线。
+- 停牌。
+- 前复权/后复权/不复权处理。
+- 异常价格。
+- 分钟线断点。
+- 时间戳对齐。
+- 交易日历一致性。
 
-2. Large-scale batch backtesting.
-   - Task queue.
-   - Parallel workers.
-   - Parameter scanning.
-   - Result ranking.
-   - Strategy comparison.
+## 研究任务
 
-3. Full-market minute-level virtual trading.
-   - Treated as a later performance expansion.
-   - Requires careful data throughput, caching, and worker scaling.
+研究级能力优先级：
 
-Backtests and virtual trading should share metric definitions wherever possible.
+1. 多策略组合管理。
+   - 多个策略共享资金、风控、监控和归因。
 
-## Deployment Model
+2. 大规模批量回测。
+   - 任务队列。
+   - 并行 worker。
+   - 参数扫描。
+   - 结果排行。
+   - 策略对比。
 
-Preferred target model:
+3. 全市场分钟级虚拟盘。
+   - 作为后续性能扩展目标。
+   - 需要重点处理数据吞吐、缓存和 worker 扩展。
 
-- Hybrid architecture.
-- Local machine can run data and future broker adapters.
-- Web console can run locally or on a server.
-- Research workers can scale out later.
+回测和虚拟盘应尽量共用同一套指标口径。
 
-MVP may run on one Windows machine or one server with multiple services.
+## 部署模型
 
-Future production deployment may split:
+目标部署形态：
 
-- Web/API service.
-- Market data service.
-- Strategy execution service.
-- Virtual trading service.
-- Backtest worker pool.
-- Monitoring and reporting service.
-- Storage services.
+- 混合架构。
+- 本机可以运行数据适配器和未来券商适配器。
+- Web 控制台可以本地运行，也可以部署到服务器。
+- 研究 worker 后续可以横向扩展。
 
-## Safety Requirements
+MVP 可以先在一台 Windows 机器或一台服务器上运行多个服务。
 
-The system must include:
+后续生产部署可以拆分为：
 
-- No live trading in MVP.
-- Strategy version history.
-- Audit logs for all changes.
-- User confirmation for AI-generated changes.
-- Hot-update event tracking.
-- Risk kill switches.
-- Data-quality warnings.
-- Runtime health checks.
-- Clear distinction between virtual and live environments.
+- Web/API 服务。
+- 行情数据服务。
+- 策略执行服务。
+- 虚拟交易服务。
+- 回测 worker 池。
+- 监控和报告服务。
+- 存储服务。
 
-## Open Implementation Decisions
+## 安全要求
 
-These are design-time decisions for the implementation plan, not unresolved product requirements:
+系统必须包含：
 
-- Exact frontend stack.
-- Exact backend language and framework.
-- Initial data provider.
-- Storage engine choices.
-- Message bus and task queue choices.
-- AI provider and model integration details.
-- Whether the first MVP uses true separate services or separate modules with service-compatible boundaries.
+- MVP 不做实盘交易。
+- 策略版本历史。
+- 所有变更的审计日志。
+- AI 生成修改必须用户确认。
+- 参数热更新事件追踪。
+- 风控熔断开关。
+- 数据质量警告。
+- 运行健康检查。
+- 清晰区分虚拟环境和实盘环境。
 
-## Acceptance Criteria For The First Build Plan
+## 待实施阶段决定的问题
 
-The implementation plan should produce a working MVP that can:
+以下是实施计划阶段需要决定的工程问题，不是产品需求缺口：
 
-- Create a strategy from structured rules.
-- View the same strategy in canvas and AI-assistant modes.
-- Hot-update safe parameters.
-- Draft and publish rule changes through a versioned flow.
-- Load sample daily and minute A-share data.
-- Run intraday-style virtual simulation.
-- Run end-of-day replay.
-- Track multiple strategies in one portfolio.
-- Show real-time monitoring state.
-- Generate a daily report with win rate, signal hit rate, and target-achievement rate.
-- Record audit logs for strategy changes and runtime events.
+- 具体前端技术栈。
+- 具体后端语言和框架。
+- 初始数据源。
+- 存储引擎选择。
+- 消息总线和任务队列选择。
+- AI 服务商和模型集成细节。
+- MVP 第一版是真正多服务，还是先用服务兼容边界的多模块实现。
 
+## 第一版实施计划验收标准
+
+实施计划应交付一个可以运行的 MVP，能够：
+
+- 从结构化规则创建策略。
+- 在画布和 AI 助手模式查看同一策略。
+- 热更新安全参数。
+- 通过版本化流程起草和发布规则变更。
+- 加载样例日线和分钟级 A 股数据。
+- 运行盘中风格的虚拟模拟。
+- 运行收盘后复盘。
+- 在一个组合中跟踪多个策略。
+- 展示实时监控状态。
+- 生成包含交易胜率、信号命中率和策略达标率的日报。
+- 记录策略变更和运行事件的审计日志。

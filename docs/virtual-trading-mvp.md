@@ -1,42 +1,42 @@
-# Virtual Trading MVP
+﻿# 虚拟盘 MVP 使用说明
 
-## What This Build Does
+## 当前版本能做什么
 
-This MVP runs a local virtual trading loop for sample A-share data. It supports one structured-rule strategy, a switchable strategy workspace, virtual orders and fills, portfolio monitoring, audit events, and a daily report.
+这个 MVP 可以在本地运行一条 A 股样例数据上的虚拟交易闭环。它支持一个结构化规则策略、可切换的策略工作台、虚拟订单和成交、组合监控、审计事件，以及每日指标报告。
 
-## Local Commands
+## 本地命令
 
-Install dependencies:
+安装依赖：
 
 ```powershell
 npm.cmd install
 ```
 
-Run tests:
+运行测试：
 
 ```powershell
 npm.cmd run test
 ```
 
-Run typecheck:
+运行类型检查：
 
 ```powershell
 npm.cmd run typecheck
 ```
 
-Start the API and web console:
+启动 API 和 Web 控制台：
 
 ```powershell
 npm.cmd run dev
 ```
 
-Open:
+打开 Web 控制台：
 
 ```text
 http://127.0.0.1:5173
 ```
 
-Run a PowerShell API smoke test:
+运行 PowerShell API 冒烟测试：
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8787/api/simulation/run' -ContentType 'application/json' -Body '{}'
@@ -44,23 +44,23 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/monitoring'
 Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/report/daily'
 ```
 
-## Safety Boundary
+## 安全边界
 
-This build is virtual trading only. It does not connect to a broker, does not place live orders, and does not manage real funds.
+当前版本只做虚拟交易。它不会连接券商，不会发出真实订单，也不会管理真实资金。
 
-## First Supported Flow
+## 第一条可用流程
 
-1. Open the web console.
-2. Switch between structured rules, canvas, and AI assistant modes.
-3. Run the virtual trading simulation.
-4. Review monitoring state.
-5. Review daily report metrics.
-6. Review audit event count.
+1. 打开 Web 控制台。
+2. 在结构化规则、画布模块、AI 助手之间切换。
+3. 点击“运行虚拟盘”。
+4. 查看实时监控状态。
+5. 查看日报指标。
+6. 查看审计事件数量。
 
-## Metric Definitions
+## 指标口径
 
-Trading win rate is profitable closed trades divided by closed trades.
+交易胜率：盈利平仓交易数 / 已平仓交易数。
 
-Signal hit rate is hit signals divided by evaluated signals.
+信号命中率：命中信号数 / 已评估信号数。
 
-Strategy target achievement is true when configured return and drawdown targets are met.
+策略达标：当配置的收益目标和回撤目标同时满足时为“达标”。

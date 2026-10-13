@@ -6,3 +6,10 @@ coverage/
 *.log
 *.tsbuildinfo
 tmp/
+
+# PrizmKit
+.prizmkit/*
+
+# Local temp / research dumps
+.tmp/
+text_*.json

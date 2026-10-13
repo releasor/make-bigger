@@ -9,6 +9,171 @@ export interface RuntimeParameters {
   buyThreshold: number;
 }
 
+export interface VirtualTradingConfig {
+  market: "A股";
+  mode: "virtual_with_ai_advice";
+  primaryHorizon: "intraday_short";
+  startingCash: number;
+  maxSymbolExposurePct: number;
+  defaultOrderQuantity: number;
+  autoTradingIntervalMs: number;
+  killSwitch: boolean;
+  realBrokerReserved: boolean;
+}
+
+export type StrategyHorizon = "intraday_short" | "swing" | "long_term";
+
+export type AiApiProvider = "openai-compatible" | "deepseek" | "qwen" | "custom";
+
+export interface AiApiConfig {
+  enabled: boolean;
+  provider: AiApiProvider;
+  baseUrl: string;
+  model: string;
+  apiKeyConfigured: boolean;
+  apiKeyMasked?: string;
+  timeoutMs: number;
+  temperature: number;
+}
+
+export interface AiApiConfigPatch {
+  enabled?: boolean;
+  provider?: AiApiProvider;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  timeoutMs?: number;
+  temperature?: number;
+}
+
+export interface AiRuntimeStatus {
+  enabled: boolean;
+  mode: "ai_api" | "rule_fallback";
+  provider: AiApiProvider;
+  model: string;
+  apiKeyConfigured: boolean;
+}
+
+/** 单个 AI API 配置条目（支持多配置） */
+export interface AiApiConfigEntry {
+  id: string;
+  name: string;
+  enabled: boolean;
+  provider: AiApiProvider;
+  baseUrl: string;
+  model: string;
+  apiKeyConfigured: boolean;
+  apiKeyMasked?: string;
+  /** 原始密钥（仅内部使用，不返回前端） */
+  apiKey?: string;
+  timeoutMs: number;
+  temperature: number;
+  isDefault: boolean;
+}
+
+/** 创建/更新 AI 配置时的输入 */
+export interface AiApiConfigInput {
+  name?: string;
+  enabled?: boolean;
+  provider?: AiApiProvider;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  timeoutMs?: number;
+  temperature?: number;
+}
+
+/** AI 配置测试连接结果 */
+export interface AiApiTestResult {
+  ok: boolean;
+  model?: string;
+  latencyMs?: number;
+  error?: string;
+}
+
+export interface VirtualTradePlan {
+  entryZoneLow: number;
+  entryZoneHigh: number;
+  stopLossPrice: number;
+  takeProfitPrice: number;
+  riskRewardRatio: number;
+  positionPct: number;
+  maxLossPctOfPortfolio: number;
+  checklist: string[];
+}
+
+export interface EvaluatedStock {
+  symbol: string;
+  sector: string;
+  rank: number;
+  decision: "重点关注" | "观察等待" | "暂不纳入";
+  latestPrice: number;
+  scores: {
+    trend: number;
+    volume: number;
+    abnormal: number;
+    risk: number;
+    total: number;
+  };
+  screeningEvidence: string[];
+  tradePlan: VirtualTradePlan;
+}
+
+
+export interface StockAnalysisIndicator {
+  name: string;
+  status: "positive" | "neutral" | "negative";
+  value: string;
+  explanation: string;
+}
+
+export interface StockAnalysisExternalIntel {
+  source: ExternalIntelSource;
+  title: string;
+  summary: string;
+  relatedSymbols: string[];
+  credibility: "verified" | "reported" | "unverified";
+}
+
+export interface StockAnalysisReport {
+  query: string;
+  symbol: string;
+  name: string;
+  market: "A股";
+  horizon: "日内短线为主，波段/长线参考";
+  decision: "重点关注" | "观察等待" | "暂不纳入";
+  confidence: number;
+  summary: string;
+  indicators: StockAnalysisIndicator[];
+  reasons: string[];
+  risks: string[];
+  tradePlan: VirtualTradePlan;
+  externalIntel: StockAnalysisExternalIntel[];
+  source: {
+    provider: string;
+    isReal: boolean;
+    cacheHit: boolean;
+    updatedAt: string;
+  };
+  disclaimer: string;
+}
+
+export interface AiTradingAdvice {
+  id: string;
+  horizon: StrategyHorizon;
+  horizonLabel: string;
+  priority: "primary" | "reference";
+  symbol?: string;
+  action: "buy_watch" | "hold_watch" | "risk_reduce" | "wait";
+  title: string;
+  summary: string;
+  confidence: number;
+  positionHintPct: number;
+  riskBoundary: string;
+  reasons: string[];
+  evaluatedStocks?: EvaluatedStock[];
+}
+
 export interface RuleValue {
   kind: "field" | "number";
   value: string | number;
@@ -30,7 +195,7 @@ export interface StrategyDefinition {
   name: string;
   version: number;
   status: StrategyStatus;
-  universe: string[];
+  universe: string[] | "*";
   dataFrequency: "daily" | "minute" | "daily-and-minute";
   parameters: RuntimeParameters;
   rules: StrategyRules;
@@ -42,7 +207,7 @@ export interface StrategySeed {
   id: string;
   name: string;
   version: number;
-  universe: string[];
+  universe: string[] | "*";
   parameters: RuntimeParameters;
 }
 
@@ -132,6 +297,7 @@ export interface StrongStockCandidate {
   volumeScore: number;
   abnormalScore: number;
   totalScore: number;
+  turnoverRate: number;
   labels: string[];
   basis: string[];
   riskNotes: string[];
@@ -268,8 +434,32 @@ export interface AShareMarketSession {
   nextAction: string;
 }
 
+// 2026 年 A 股法定休市日（元旦、春节、清明、劳动节、端午、中秋、国庆）
+const A_SHARE_HOLIDAYS_2026: Set<string> = new Set([
+  // 元旦
+  "2026-01-01", "2026-01-02", "2026-01-03",
+  // 春节
+  "2026-02-14", "2026-02-15", "2026-02-16", "2026-02-17", "2026-02-18", "2026-02-19", "2026-02-20",
+  // 清明节
+  "2026-04-04", "2026-04-05", "2026-04-06",
+  // 劳动节
+  "2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04", "2026-05-05",
+  // 端午节
+  "2026-06-19", "2026-06-20", "2026-06-21",
+  // 中秋节
+  "2026-09-25", "2026-09-26", "2026-09-27",
+  // 国庆节
+  "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07"
+]);
+
 export function getAShareMarketSession(now: Date = new Date()): AShareMarketSession {
   const { weekday, minutes } = getShanghaiMarketTime(now);
+
+  // Check holidays
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  if (A_SHARE_HOLIDAYS_2026.has(dateStr)) {
+    return closedSession("closed_day", "法定节假日", "等待下一个交易日");
+  }
 
   if (weekday === "Sat" || weekday === "Sun") {
     return closedSession("closed_day", "休盘日", "等待下一个交易日");
@@ -314,7 +504,7 @@ export function getAShareMarketSession(now: Date = new Date()): AShareMarketSess
 }
 
 export function createStrategyVersion(seed: StrategySeed): StrategyDefinition {
-  const now = "2026-06-08T09:30:00.000+08:00";
+  const now = new Date().toISOString();
 
   return {
     id: seed.id,
@@ -370,7 +560,7 @@ export function validateStrategyDefinition(strategy: StrategyDefinition): Valida
   if (!strategy.id.trim()) errors.push("id is required");
   if (!strategy.name.trim()) errors.push("name is required");
   if (strategy.version < 1) errors.push("version must be positive");
-  if (strategy.universe.length === 0) errors.push("universe must include at least one symbol");
+  if (strategy.universe !== "*" && strategy.universe.length === 0) errors.push("universe must include at least one symbol");
   if (strategy.parameters.maxPositionPct <= 0 || strategy.parameters.maxPositionPct > 1) {
     errors.push("parameters.maxPositionPct must be between 0 and 1");
   }

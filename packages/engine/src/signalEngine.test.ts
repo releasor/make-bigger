@@ -59,4 +59,79 @@ describe("signal engine", () => {
     expect(signals).toHaveLength(1);
     expect(signals[0]?.side).toBe("sell");
   });
+
+  it("returns empty array when bars array is empty", () => {
+    const strategy = createStrategyVersion({
+      id: "ma-volume",
+      name: "test",
+      version: 1,
+      universe: ["000001.SZ"],
+      parameters: { maxPositionPct: 0.1, stopLossPct: 0.08, buyThreshold: 1 }
+    });
+
+    const signals = evaluateSignals(strategy, []);
+    expect(signals).toHaveLength(0);
+  });
+
+  it("gracefully skips bars with missing indicator fields", () => {
+    const strategy = createStrategyVersion({
+      id: "ma-volume",
+      name: "test",
+      version: 1,
+      universe: ["000001.SZ"],
+      parameters: { maxPositionPct: 0.1, stopLossPct: 0.08, buyThreshold: 1 }
+    });
+
+    const signals = evaluateSignals(strategy, [
+      {
+        symbol: "000001.SZ",
+        timestamp: "2026-06-08T09:32:00.000+08:00",
+        open: 10.15,
+        high: 10.35,
+        low: 10.14,
+        close: 10.34,
+        volume: 26000,
+        fields: {} // missing ma20, avgVolume20, rsi14
+      }
+    ]);
+
+    expect(signals).toHaveLength(0);
+  });
+
+  it("deduplicates signals by symbol and side", () => {
+    const strategy = createStrategyVersion({
+      id: "ma-volume",
+      name: "test",
+      version: 1,
+      universe: "*",
+      parameters: { maxPositionPct: 0.1, stopLossPct: 0.08, buyThreshold: 1 }
+    });
+
+    // Two bars for same symbol at different times - should only produce one buy signal
+    const signals = evaluateSignals(strategy, [
+      {
+        symbol: "000001.SZ",
+        timestamp: "2026-06-08T09:32:00.000+08:00",
+        open: 10.15,
+        high: 10.35,
+        low: 10.14,
+        close: 10.34,
+        volume: 26000,
+        fields: { ma20: 10.06, avgVolume20: 15000, rsi14: 43 }
+      },
+      {
+        symbol: "000001.SZ",
+        timestamp: "2026-06-08T09:33:00.000+08:00",
+        open: 10.34,
+        high: 10.45,
+        low: 10.30,
+        close: 10.42,
+        volume: 28000,
+        fields: { ma20: 10.07, avgVolume20: 15000, rsi14: 45 }
+      }
+    ]);
+
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.side).toBe("buy");
+  });
 });

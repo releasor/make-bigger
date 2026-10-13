@@ -1,4 +1,5 @@
 import type { ManualPosition, MarketBar, SellSignalAlert, ShortTermBuySignal } from "@itrade/domain";
+import { round2 } from "./utils";
 
 interface ShortTermSignalOptions {
   minConfidenceScore?: number;
@@ -159,8 +160,4 @@ function latestBuySignalPerSymbol(signals: ShortTermBuySignal[]): ShortTermBuySi
   }
 
   return [...latestBySymbol.values()].sort((left, right) => right.confidenceScore - left.confidenceScore);
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }

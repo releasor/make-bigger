@@ -8,6 +8,7 @@ import type {
   Signal,
   StrategyDefinition
 } from "@itrade/domain";
+import { round2 } from "./utils";
 import { checkOrderRisk } from "./riskEngine";
 import { evaluateSignals } from "./signalEngine";
 
@@ -15,6 +16,8 @@ export interface VirtualTradingInput {
   strategies: StrategyDefinition[];
   bars: MarketBar[];
   startingCash: number;
+  initialPortfolio?: PortfolioSnapshot;
+  ignoredSignalIds?: string[];
   maxSymbolExposurePct: number;
   killSwitch: boolean;
 }
@@ -28,28 +31,33 @@ export interface VirtualTradingResult {
 }
 
 export function runVirtualTradingSession(input: VirtualTradingInput): VirtualTradingResult {
-  let portfolio: PortfolioSnapshot = {
-    cash: input.startingCash,
-    positions: [],
-    totalEquity: input.startingCash,
-    realizedPnl: 0,
-    unrealizedPnl: 0
-  };
+  let portfolio = input.initialPortfolio
+    ? clonePortfolio(input.initialPortfolio)
+    : createStartingPortfolio(input.startingCash);
+  const ignoredSignalIds = new Set(input.ignoredSignalIds ?? []);
   const signals: Signal[] = [];
   const orders: Order[] = [];
   const fills: Fill[] = [];
   const auditEvents: AuditEvent[] = [];
 
+  // Pre-index bars by symbol+timestamp for O(1) lookup
+  const barIndex = new Map<string, MarketBar>();
+  for (const bar of input.bars) {
+    barIndex.set(`${bar.symbol}|${bar.timestamp}`, bar);
+  }
+
   for (const strategy of input.strategies) {
-    const strategySignals = evaluateSignals(strategy, input.bars);
+    const strategySignals = evaluateSignals(strategy, input.bars).filter((signal) => !ignoredSignalIds.has(signal.id));
     signals.push(...strategySignals);
 
     for (const signal of strategySignals) {
-      const bar = input.bars.find((item) => item.symbol === signal.symbol && item.timestamp === signal.timestamp);
+      const bar = barIndex.get(`${signal.symbol}|${signal.timestamp}`);
       if (!bar) continue;
-      if (signal.side === "buy" && hasOpenPosition(portfolio, signal.symbol)) continue;
+      const position = findOpenPosition(portfolio, signal.symbol);
+      if (signal.side === "buy" && position) continue;
+      if (signal.side === "sell" && !position) continue;
 
-      const order = createOrder(signal, bar, portfolio, strategy.parameters.maxPositionPct);
+      const order = createOrder(signal, bar, portfolio, strategy.parameters.maxPositionPct, position);
       if (order.quantity <= 0) continue;
       const decision = checkOrderRisk(order, portfolio, {
         maxSymbolExposurePct: input.maxSymbolExposurePct,
@@ -71,9 +79,34 @@ export function runVirtualTradingSession(input: VirtualTradingInput): VirtualTra
   return { signals, orders, fills, portfolio, auditEvents };
 }
 
-function createOrder(signal: Signal, bar: MarketBar, portfolio: PortfolioSnapshot, maxPositionPct: number): Order {
-  const cashBudget = portfolio.totalEquity * maxPositionPct;
-  const quantity = Math.floor(Math.floor(cashBudget / bar.close) / 100) * 100;
+export function createStartingPortfolio(startingCash: number): PortfolioSnapshot {
+  return {
+    cash: startingCash,
+    positions: [],
+    totalEquity: startingCash,
+    realizedPnl: 0,
+    unrealizedPnl: 0
+  };
+}
+
+function clonePortfolio(portfolio: PortfolioSnapshot): PortfolioSnapshot {
+  return {
+    ...portfolio,
+    positions: portfolio.positions.map((position) => ({ ...position }))
+  };
+}
+
+function createOrder(
+  signal: Signal,
+  bar: MarketBar,
+  portfolio: PortfolioSnapshot,
+  maxPositionPct: number,
+  position?: Position
+): Order {
+  const quantity =
+    signal.side === "sell"
+      ? Math.floor((position?.quantity ?? 0) / 100) * 100
+      : Math.floor(Math.floor((portfolio.totalEquity * maxPositionPct) / bar.close) / 100) * 100;
 
   return {
     id: `order-${signal.id}`,
@@ -86,8 +119,8 @@ function createOrder(signal: Signal, bar: MarketBar, portfolio: PortfolioSnapsho
   };
 }
 
-function hasOpenPosition(portfolio: PortfolioSnapshot, symbol: string): boolean {
-  return portfolio.positions.some((position) => position.symbol === symbol && position.quantity > 0);
+function findOpenPosition(portfolio: PortfolioSnapshot, symbol: string): Position | undefined {
+  return portfolio.positions.find((position) => position.symbol === symbol && position.quantity > 0);
 }
 
 function createFill(order: Order): Fill {
@@ -123,7 +156,28 @@ function applyFill(portfolio: PortfolioSnapshot, fill: Fill): PortfolioSnapshot 
     };
   }
 
-  return portfolio;
+  const existing = portfolio.positions.find((position) => position.symbol === fill.symbol);
+  if (!existing) return portfolio;
+
+  const quantity = Math.min(fill.quantity, existing.quantity);
+  const proceeds = fill.price * quantity - fill.commission - fill.tax;
+  const realizedPnl = round2((fill.price - existing.averageCost) * quantity - fill.commission - fill.tax);
+  const positions = portfolio.positions
+    .map((position) =>
+      position.symbol === fill.symbol
+        ? { ...position, quantity: position.quantity - quantity, marketPrice: fill.price }
+        : position
+    )
+    .filter((position) => position.quantity > 0);
+  const marketValue = positions.reduce((sum, position) => sum + position.quantity * position.marketPrice, 0);
+
+  return {
+    ...portfolio,
+    cash: round2(portfolio.cash + proceeds),
+    positions,
+    totalEquity: round2(portfolio.cash + proceeds + marketValue),
+    realizedPnl: round2(portfolio.realizedPnl + realizedPnl)
+  };
 }
 
 function upsertPosition(positions: Position[], fill: Fill): Position[] {
@@ -158,14 +212,10 @@ function upsertPosition(positions: Position[], fill: Fill): Position[] {
 function audit(action: string, entityId: string, details: AuditEvent["details"]): AuditEvent {
   return {
     id: `audit-${action}-${entityId}`,
-    timestamp: "2026-06-08T09:32:30.000+08:00",
+    timestamp: new Date().toISOString(),
     actor: "system",
     action,
     entityId,
     details
   };
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }

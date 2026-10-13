@@ -32,6 +32,88 @@ describe("daily report", () => {
     expect(report.strategyTargetAchieved).toBe(true);
     expect(report.dailyReturnPct).toBe(0.006);
   });
+
+  it("handles zero signals and zero fills", () => {
+    const report = buildDailyReport({
+      date: "2026-06-08",
+      startingEquity: 100000,
+      endingEquity: 100000,
+      maxDrawdownPct: 0,
+      fills: [],
+      signals: [],
+      hitSignalIds: [],
+      target: { minReturnPct: 0.001, maxDrawdownPct: 0.03 }
+    });
+
+    expect(report.tradingWinRate).toBe(0);
+    expect(report.signalHitRate).toBe(0);
+    expect(report.strategyTargetAchieved).toBe(false); // 0 < 0.001
+    expect(report.dailyReturnPct).toBe(0);
+    expect(report.tradeCount).toBe(0);
+    expect(report.signalCount).toBe(0);
+  });
+
+  it("handles zero starting equity without division error", () => {
+    const report = buildDailyReport({
+      date: "2026-06-08",
+      startingEquity: 0,
+      endingEquity: 1000,
+      maxDrawdownPct: 0,
+      fills: [],
+      signals: [],
+      hitSignalIds: [],
+      target: { minReturnPct: 0, maxDrawdownPct: 1 }
+    });
+
+    expect(report.dailyReturnPct).toBe(0); // guarded against division by zero
+  });
+
+  it("handles all-winning trades", () => {
+    const fills: Fill[] = [
+      fill("buy-1", "buy", 10, 100),
+      fill("sell-1", "sell", 12, 100),
+      fill("buy-2", "buy", 8, 100),
+      fill("sell-2", "sell", 10, 100)
+    ];
+
+    const report = buildDailyReport({
+      date: "2026-06-08",
+      startingEquity: 100000,
+      endingEquity: 100400,
+      maxDrawdownPct: 0,
+      fills,
+      signals: [],
+      hitSignalIds: [],
+      target: { minReturnPct: 0.001, maxDrawdownPct: 0.03 }
+    });
+
+    expect(report.tradingWinRate).toBe(1);
+    expect(report.tradeCount).toBe(2);
+  });
+
+  it("handles all-losing trades", () => {
+    const fills: Fill[] = [
+      fill("buy-1", "buy", 10, 100),
+      fill("sell-1", "sell", 9, 100),
+      fill("buy-2", "buy", 8, 100),
+      fill("sell-2", "sell", 7, 100)
+    ];
+
+    const report = buildDailyReport({
+      date: "2026-06-08",
+      startingEquity: 100000,
+      endingEquity: 99600,
+      maxDrawdownPct: 0.004,
+      fills,
+      signals: [],
+      hitSignalIds: [],
+      target: { minReturnPct: 0.001, maxDrawdownPct: 0.03 }
+    });
+
+    expect(report.tradingWinRate).toBe(0);
+    expect(report.tradeCount).toBe(2);
+    expect(report.strategyTargetAchieved).toBe(false); // negative return
+  });
 });
 
 function fill(orderId: string, side: "buy" | "sell", price: number, quantity: number): Fill {

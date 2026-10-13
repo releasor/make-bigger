@@ -2,19 +2,29 @@ import type { MarketBar, RuleCondition, Signal, StrategyDefinition } from "@itra
 
 export function evaluateSignals(strategy: StrategyDefinition, bars: MarketBar[]): Signal[] {
   const signals: Signal[] = [];
+  const seen = new Set<string>();
 
+  const isFullMarket = strategy.universe === "*";
   for (const bar of bars) {
-    if (!strategy.universe.includes(bar.symbol)) continue;
+    if (!isFullMarket && !strategy.universe.includes(bar.symbol)) continue;
 
     const entryPass = strategy.rules.entry.every((rule) => evaluateRule(rule, bar));
     if (entryPass) {
-      signals.push(createSignal(strategy, bar, "buy", "entry rules matched"));
+      const key = `${bar.symbol}-buy`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        signals.push(createSignal(strategy, bar, "buy", "entry rules matched"));
+      }
       continue;
     }
 
     const exitPass = strategy.rules.exit.some((rule) => evaluateRule(rule, bar));
     if (exitPass) {
-      signals.push(createSignal(strategy, bar, "sell", "exit rules matched"));
+      const key = `${bar.symbol}-sell`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        signals.push(createSignal(strategy, bar, "sell", "exit rules matched"));
+      }
     }
   }
 
@@ -43,6 +53,9 @@ function evaluateRule(rule: RuleCondition, bar: MarketBar): boolean {
   const left = readValue(rule.left, bar);
   const right = rule.right.kind === "number" ? Number(rule.right.value) : readValue(String(rule.right.value), bar);
 
+  // Gracefully skip bars with missing indicator fields
+  if (left === undefined || right === undefined) return false;
+
   switch (rule.operator) {
     case "gt":
       return left > right;
@@ -57,7 +70,7 @@ function evaluateRule(rule: RuleCondition, bar: MarketBar): boolean {
   }
 }
 
-function readValue(name: string, bar: MarketBar): number {
+function readValue(name: string, bar: MarketBar): number | undefined {
   if (name === "open") return bar.open;
   if (name === "high") return bar.high;
   if (name === "low") return bar.low;
@@ -65,8 +78,5 @@ function readValue(name: string, bar: MarketBar): number {
   if (name === "volume") return bar.volume;
 
   const value = bar.fields[name];
-  if (typeof value !== "number") {
-    throw new Error(`Market field ${name} is missing for ${bar.symbol} ${bar.timestamp}`);
-  }
-  return value;
+  return typeof value === "number" ? value : undefined;
 }

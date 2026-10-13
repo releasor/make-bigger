@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   EastMoneyMarketDataProvider,
+  TencentKlineMarketDataProvider,
+  TencentQuoteMarketDataProvider,
   createCachedMarketDataProvider,
+  createFallbackMarketDataProvider,
   fetchMarketDataSnapshot,
   parseEastMoneyKlines
 } from "./realMarketData";
@@ -58,6 +61,76 @@ describe("real market data provider", () => {
     expect(snapshot.minute).toHaveLength(2);
     expect(snapshot.quality.ok).toBe(true);
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads a real-time snapshot from an injected Tencent quote fetcher", async () => {
+    const provider = new TencentQuoteMarketDataProvider({
+      fetcher: async () =>
+        'v_sz000001="51~平安银行~000001~11.17~11.03~11.01~694056~454277~239778~11.16~3477~11.15~2830~11.14~2866~11.13~6577~11.12~1388~11.17~8028~11.18~9292~11.19~16365~11.20~20653~11.21~7734~~20260609110112~0.14~1.27~11.19~10.96~11.17/694056/770234531~694056~77023~0.36~5.03~~11.19~10.96~2.09~2167.61~2167.64~0.47~12.13~9.93~1.94~-44934~11.10~3.73~5.08~~~0.39~77023.4531~0.0000~0";'
+    });
+
+    const snapshot = await fetchMarketDataSnapshot(provider, ["000001.SZ"]);
+
+    expect(snapshot.source.provider).toBe("tencent-quote");
+    expect(snapshot.source.isReal).toBe(true);
+    expect(snapshot.daily.at(-1)).toMatchObject({
+      symbol: "000001.SZ",
+      open: 11.01,
+      close: 11.17,
+      high: 11.19,
+      low: 10.96
+    });
+    expect(snapshot.minute.at(-1)?.timestamp).toBe("2026-06-09T11:01:12.000+08:00");
+    expect(snapshot.quality.ok).toBe(true);
+  });
+
+  it("loads Tencent daily kline depth with a real-time minute quote fallback", async () => {
+    const provider = new TencentKlineMarketDataProvider({
+      fetcher: async (url: string) => {
+        if (url.includes("fqkline/get")) {
+          return JSON.stringify({
+            code: 0,
+            data: {
+              sz000001: {
+                qfqday: [
+                  ["2026-06-06", "11.000", "11.030", "11.080", "10.960", "600000.000"],
+                  ["2026-06-09", "11.010", "11.170", "11.190", "10.960", "694056.000"]
+                ]
+              }
+            }
+          });
+        }
+
+        return 'v_sz000001="51~骞冲畨閾惰~000001~11.17~11.03~11.01~694056~454277~239778~11.16~3477~11.15~2830~11.14~2866~11.13~6577~11.12~1388~11.17~8028~11.18~9292~11.19~16365~11.20~20653~11.21~7734~~20260609110112~0.14~1.27~11.19~10.96~11.17/694056/770234531~694056~77023~0.36~5.03~~11.19~10.96~2.09~2167.61~2167.64~0.47~12.13~9.93~1.94~-44934~11.10~3.73~5.08~~~0.39~77023.4531~0.0000~0";';
+      }
+    });
+
+    const snapshot = await fetchMarketDataSnapshot(provider, ["000001.SZ"]);
+
+    expect(snapshot.source.provider).toBe("tencent-kline");
+    expect(snapshot.daily).toHaveLength(2);
+    expect(snapshot.minute).toHaveLength(1);
+    expect(snapshot.daily.at(-1)).toMatchObject({ close: 11.17, high: 11.19, low: 10.96 });
+    expect(snapshot.source.warnings.join(" ")).toContain("腾讯 K 线备援");
+  });
+
+  it("tries a backup real-time provider before using cache fallback", async () => {
+    const provider = createFallbackMarketDataProvider([
+      new EastMoneyMarketDataProvider({
+        fetcher: async () => {
+          throw new Error("socket hang up");
+        }
+      }),
+      new TencentQuoteMarketDataProvider({
+        fetcher: async () =>
+          'v_sz000001="51~平安银行~000001~11.17~11.03~11.01~694056~454277~239778~11.16~3477~11.15~2830~11.14~2866~11.13~6577~11.12~1388~11.17~8028~11.18~9292~11.19~16365~11.20~20653~11.21~7734~~20260609110112~0.14~1.27~11.19~10.96~11.17/694056/770234531~694056~77023~0.36~5.03~~11.19~10.96~2.09~2167.61~2167.64~0.47~12.13~9.93~1.94~-44934~11.10~3.73~5.08~~~0.39~77023.4531~0.0000~0";'
+      })
+    ]);
+
+    const snapshot = await fetchMarketDataSnapshot(provider, ["000001.SZ"]);
+
+    expect(snapshot.source.provider).toBe("tencent-quote");
+    expect(snapshot.source.warnings).toContain("eastmoney 不可用：socket hang up");
   });
 
   it("uses cached real market data when the upstream provider fails", async () => {
